@@ -11,10 +11,10 @@ const client = new Client({
     ]
 });
 
-// ID-ul tău oficial de Staff:
+// ID-ul oficial de Staff pentru tichete:
 const STAFF_ROLE_ID = "1490701828831052027"; 
 
-// Fișiere în /tmp pentru Render
+// Directoare de stocare compatibile cu mediul Render /tmp
 const WARNS_FILE = path.join('/tmp', 'warns.json');
 const INVITES_FILE = path.join('/tmp', 'invites.json');
 
@@ -24,7 +24,7 @@ if (!fs.existsSync(INVITES_FILE)) fs.writeFileSync(INVITES_FILE, JSON.stringify(
 const invitesCache = new Map();
 
 client.once('ready', async () => {
-    console.log(`🤖 ${client.user.tag} este online cu Panouri Premium, Invites și Sistem Complet de Warns!`);
+    console.log(`🤖 ${client.user.tag} ruliază stabil cu toate sistemele sincronizate!`);
 
     for (const [guildId, guild] of client.guilds.cache) {
         try {
@@ -81,13 +81,15 @@ client.once('ready', async () => {
 
         new SlashCommandBuilder()
             .setName('unwarn')
-            .setDescription('Scoate un avertisment sau toate avertismentele unui membru')
-            .addUserOption(option => option.setName('user').setDescription('Membrul căruia îi scoți warn-ul').setRequired(true))
-            .addStringOption(option => option.setName('select').setDescription('Alege ce ștergi').setRequired(true)
-                .addChoices(
-                    { name: 'Șterge ultimul warn primit', value: 'last' },
-                    { name: 'Șterge ABSOLUT TOATE warn-urile', value: 'all' }
-                ))
+            .setDescription('Scoate un număr specific de avertismente unui membru')
+            .addUserOption(option => option.setName('user').setDescription('Membrul căruia îi scazi warn-urile').setRequired(true))
+            .addIntegerOption(option => option.setName('cantitate').setDescription('Câte warn-uri ștergi (implicit 1)').setRequired(false))
+            .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+
+        new SlashCommandBuilder()
+            .setName('clearwarns')
+            .setDescription('Șterge ABSOLUT TOATE avertismentele unui utilizator')
+            .addUserOption(option => option.setName('user').setDescription('Membrul căruia îi cureți istoricul').setRequired(true))
             .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 
         new SlashCommandBuilder()
@@ -114,9 +116,9 @@ client.once('ready', async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
     try {
-        console.log('🔄 Actualizăm toate comenzile în API...');
+        console.log('🔄 Actualizăm setul complet de comenzi în cache-ul global...');
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log('✅ Toate sistemele (inclusiv unwarn) sunt active!');
+        console.log('✅ Reînregistrare reușită! Sistemele de Unwarn și Clearwarns sunt active.');
     } catch (error) {
         console.error(error);
     }
@@ -153,36 +155,49 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand()) {
         const { commandName, options, guild, user } = interaction;
 
-        // --- SISTEMUL DE UNWARN (SCOATERE WARN) ---
+        // --- SCOATERE WARN INDIVIDUAL / CANTITATE ---
         if (commandName === 'unwarn') {
             const targetUser = options.getUser('user');
-            const actionType = options.getString('select');
+            let cantitate = options.getInteger('cantitate') || 1;
             let data = JSON.parse(fs.readFileSync(WARNS_FILE, 'utf8'));
 
             if (!data[targetUser.id] || data[targetUser.id].length === 0) {
-                return interaction.reply({ content: `ℹ️ ${targetUser.tag} nu are niciun avertisment activ în baza de date.`, ephemeral: true });
+                return interaction.reply({ content: `ℹ️ ${targetUser.tag} nu are avertismente înregistrate.`, ephemeral: true });
             }
 
-            if (actionType === 'all') {
-                // Ștergem complet istoricul lui
-                delete data[targetUser.id];
-                fs.writeFileSync(WARNS_FILE, JSON.stringify(data, null, 2));
-                return interaction.reply({ content: `✅ Toate avertismentele lui ${targetUser} au fost șterse cu succes de către ${user}!` });
-            } 
+            if (cantitate < 1) cantitate = 1;
             
-            if (actionType === 'last') {
-                // Scoatem doar ultimul warn adăugat în array (.pop())
-                const removedWarn = data[targetUser.id].pop();
-                
-                // Dacă nu mai are alte warn-uri după eliminare, curățăm cheia din JSON
-                if (data[targetUser.id].length === 0) delete data[targetUser.id];
-                
-                fs.writeFileSync(WARNS_FILE, JSON.stringify(data, null, 2));
-                return interaction.reply({ content: `✅ Ultimul avertisment primit de ${targetUser} (Motiv vechi: \`${removedWarn.reason}\`) a fost scos de către ${user}!\n📉 Warn-uri rămase: \`${data[targetUser.id] ? data[targetUser.id].length : 0}\`` });
+            // Eliminăm numărul cerut de avertismente din coadă
+            let eliminate = 0;
+            for (let i = 0; i < cantitate; i++) {
+                if (data[targetUser.id] && data[targetUser.id].length > 0) {
+                    data[targetUser.id].pop();
+                    eliminate++;
+                }
             }
+
+            const ramase = data[targetUser.id].length;
+            if (ramase === 0) delete data[targetUser.id];
+
+            fs.writeFileSync(WARNS_FILE, JSON.stringify(data, null, 2));
+            return interaction.reply({ content: `✅ S-au eliminat \`${eliminate}\` avertismente pentru ${targetUser}.\n📉 În prezent mai are: \`${ramase}\` warn-uri.` });
         }
 
-        // --- PANOU SUGESTII ---
+        // --- ȘTERGERE COMPLETĂ ISTORIC WARNS ---
+        if (commandName === 'clearwarns') {
+            const targetUser = options.getUser('user');
+            let data = JSON.parse(fs.readFileSync(WARNS_FILE, 'utf8'));
+
+            if (!data[targetUser.id] || data[targetUser.id].length === 0) {
+                return interaction.reply({ content: `ℹ️ Utilizatorul ${targetUser.tag} are deja cazierul curat.`, ephemeral: true });
+            }
+
+            delete data[targetUser.id];
+            fs.writeFileSync(WARNS_FILE, JSON.stringify(data, null, 2));
+            return interaction.reply({ content: `🧹 Cazier curățat complet! Toate avertismentele lui ${targetUser} au fost șterse de către ${user}.` });
+        }
+
+        // --- REZOLVARE COMANDE SUGESTII / TICKETS / MODERARE CURENTĂ ---
         if (commandName === 'setup-sugestii') {
             await interaction.deferReply({ ephemeral: true });
             const embedSugestii = new EmbedBuilder()
@@ -198,7 +213,6 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply({ content: '✅ Panou sugestii generat!' });
         }
 
-        // --- PANOU TICKETS ---
         if (commandName === 'setup-ticket') {
             await interaction.deferReply({ ephemeral: true });
             const ticketEmbed = new EmbedBuilder()
@@ -214,7 +228,6 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply({ content: '✅ Panou generat!' });
         }
 
-        // --- RESTUL COMENZILOR DE MODERARE ȘI INVITES ---
         if (commandName === 'ban') {
             const u = options.getUser('user'); const r = options.getString('reason') || 'Fără motiv specificat'; const m = guild.members.cache.get(u.id);
             if (!m || !m.bannable) return interaction.reply({ content: '❌ Imposibil de executat!', ephemeral: true });
@@ -263,7 +276,7 @@ client.on('interactionCreate', async (interaction) => {
         if (commandName === 'invites-reset') { fs.writeFileSync(INVITES_FILE, JSON.stringify({})); return interaction.reply({ content: '✅ Resetat!' }); }
     }
 
-    // --- INTERACȚIUNI BUTOANE ȘI MODALS (SUGESTII & TICKETS) ---
+    // --- LOGICĂ BUTOANE INTERACTIVE ȘI SUBMIT MODAL ---
     if (interaction.isButton()) {
         const { customId, guild, user, message } = interaction;
 
@@ -280,38 +293,5 @@ client.on('interactionCreate', async (interaction) => {
             const oldEmbed = message.embeds[0]; const oldComponents = message.components[0].components;
             let voturiDa = parseInt(oldComponents[0].label.match(/\d+/)[0]); let voturiNu = parseInt(oldComponents[1].label.match(/\d+/)[0]);
             if (customId === 'sugestie_da') voturiDa++;
-            if (customId === 'sugestie_nu') voturiNu++;
-            const noulEmbed = EmbedBuilder.from(oldEmbed).setFields(
-                { name: oldEmbed.fields[0].name, value: oldEmbed.fields[0].value, inline: false },
-                { name: oldEmbed.fields[1].name, value: oldEmbed.fields[1].value, inline: false },
-                { name: '📊 Status Voturi:', value: `✅ Aprobări: \`${voturiDa}\` | ❌ Respingeri: \`${voturiNu}\``, inline: false }
-            );
-            return message.edit({ embeds: [noulEmbed], components: [new ActionRowBuilder().addComponents(ButtonBuilder.from(oldComponents[0]).setLabel(`Aprobă (${voturiDa})`), ButtonBuilder.from(oldComponents[1]).setLabel(`Respinge (${voturiNu})`))] });
-        }
-
-        if (['ticket_support', 'ticket_purchase', 'ticket_claim'].includes(customId)) {
-            await interaction.deferReply({ ephemeral: true });
-            let typeLabel = customId === 'ticket_purchase' ? 'purchase' : (customId === 'ticket_claim' ? 'claim' : 'support');
-            const ticketChannel = await guild.channels.create({
-                name: `${typeLabel}-${user.username}`,
-                type: ChannelType.GuildText,
-                permissionOverwrites: [
-                    { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-                    { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
-                    { id: STAFF_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }
-                ],
-            });
-            const welcomeEmbed = new EmbedBuilder().setTitle(`🎫 Ticket ${typeLabel.toUpperCase()}`).setDescription(`Salut ${user}!\n\nUn membru din staff (<@&${STAFF_ROLE_ID}>) va ajunge în cel mai scurt timp.`).setColor('#ffcc00');
-            await ticketChannel.send({ content: `${user} | <@&${STAFF_ROLE_ID}>`, embeds: [welcomeEmbed], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger))] });
-            await interaction.editReply({ content: `Creată în ${ticketChannel}!`, ephemeral: true });
-        }
-
-        if (customId === 'close_ticket') {
-            await interaction.reply({ content: 'Se șterge în 5 secunde...' });
-            setTimeout(async () => { await interaction.channel.delete().catch(() => {}); }, 5000);
-        }
-    }
-
-    if (interaction.isModalSubmit()) {
-        if (interaction.customId === 'modal_sugestie') {
-            const
+            if (customId === 'sugest
+        
