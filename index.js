@@ -1,50 +1,46 @@
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
 const fs = require('fs');
+const path = require('path');
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildInvites // Necesar pentru a citi invitațiile serverului
+        GatewayIntentBits.GuildInvites
     ]
 });
 
 // ID-ul tău oficial de Staff:
 const STAFF_ROLE_ID = "1490701828831052027"; 
 
-// Fișiere pentru stocarea datelor
-const WARNS_FILE = './warns.json';
-const INVITES_FILE = './invites.json';
+// Folosim folderul /tmp special pentru Render ca să nu mai dea eroare la permisiuni de scriere
+const WARNS_FILE = path.join('/tmp', 'warns.json');
+const INVITES_FILE = path.join('/tmp', 'invites.json');
 
 if (!fs.existsSync(WARNS_FILE)) fs.writeFileSync(WARNS_FILE, JSON.stringify({}));
 if (!fs.existsSync(INVITES_FILE)) fs.writeFileSync(INVITES_FILE, JSON.stringify({}));
 
-// Memorie temporară pentru a monitoriza modificările invitațiilor
 const invitesCache = new Map();
 
 client.once('ready', async () => {
-    console.log(`🤖 ${client.user.tag} este online cu comenzi de Moderare, Tichete și Invites!`);
+    console.log(`🤖 ${client.user.tag} este online pe Render cu Moderare, Tichete și Invites!`);
 
-    // Cache-uim toate invitațiile din fiecare server la pornire
     for (const [guildId, guild] of client.guilds.cache) {
         try {
             const guildInvites = await guild.invites.fetch();
             invitesCache.set(guild.id, new Map(guildInvites.map(invite => [invite.code, invite.uses])));
         } catch (err) {
-            console.log(`Nu am putut citi invitațiile pentru serverul: ${guild.name}`);
+            console.log(`Nu s-au putut prelua invitațiile inițiale pentru: ${guild.name}`);
         }
     }
 
-    // Definim toate comenzile cu Slash (/)
     const commands = [
-        // Comanda Ticket
         new SlashCommandBuilder()
             .setName('setup-ticket')
             .setDescription('Generează panoul premium de tichete VISIUM')
             .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-        // Comanda BAN
         new SlashCommandBuilder()
             .setName('ban')
             .setDescription('Dă ban unui membru de pe server')
@@ -52,7 +48,6 @@ client.once('ready', async () => {
             .addStringOption(option => option.setName('reason').setDescription('Motivul banului').setRequired(false))
             .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
-        // Comanda KICK
         new SlashCommandBuilder()
             .setName('kick')
             .setDescription('Dă afară un membru de pe server')
@@ -60,7 +55,6 @@ client.once('ready', async () => {
             .addStringOption(option => option.setName('reason').setDescription('Motivul').setRequired(false))
             .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
 
-        // Comanda MUTE (Timeout)
         new SlashCommandBuilder()
             .setName('mute')
             .setDescription('Pune mut unui membru (Timeout)')
@@ -69,14 +63,12 @@ client.once('ready', async () => {
             .addStringOption(option => option.setName('reason').setDescription('Motivul').setRequired(false))
             .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 
-        // Comanda UNMUTE
         new SlashCommandBuilder()
             .setName('unmute')
             .setDescription('Scoate mutul unui membru')
             .addUserOption(option => option.setName('user').setDescription('Membrul').setRequired(true))
             .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 
-        // Comanda WARN
         new SlashCommandBuilder()
             .setName('warn')
             .setDescription('Avertizează un membru')
@@ -84,26 +76,21 @@ client.once('ready', async () => {
             .addStringOption(option => option.setName('reason').setDescription('Motivul avertismentului').setRequired(false))
             .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 
-        // Comanda CHECKWARNS
         new SlashCommandBuilder()
             .setName('warns')
             .setDescription('Verifică câte avertismente are un membru')
             .addUserOption(option => option.setName('user').setDescription('Membrul').setRequired(true))
             .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 
-        // --- COMENZI NOI DE INVITES ---
-        // Vezi invitațiile cuiva
         new SlashCommandBuilder()
             .setName('invites')
             .setDescription('Verifică câte invitații ai tu sau alt membru')
             .addUserOption(option => option.setName('user').setDescription('Membrul căruia vrei să îi vezi invitațiile').setRequired(false)),
 
-        // Leaderboard de invitații
         new SlashCommandBuilder()
             .setName('invites-leaderboard')
             .setDescription('Arată topul membrilor cu cele mai multe invitații active'),
 
-        // Resetare invitații
         new SlashCommandBuilder()
             .setName('invites-reset')
             .setDescription('Resetează baza de date cu invitații (Doar Admini)')
@@ -113,61 +100,48 @@ client.once('ready', async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
     try {
-        console.log('🔄 Se încarcă noile comenzi cu slash (inclusiv Invites)...');
+        console.log('🔄 Trimit noile comenzi către Discord API...');
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log('✅ Toate comenzile au fost înregistrate cu succes!');
+        console.log('✅ Toate comenzile (inclusiv cele de Invites) sunt active!');
     } catch (error) {
         console.error(error);
     }
 });
 
-// Ascultăm când se creează o invitație nouă ca să o punem în cache
 client.on('inviteCreate', async (invite) => {
     const guildInvites = invitesCache.get(invite.guild.id) || new Map();
     guildInvites.set(invite.code, invite.uses);
     invitesCache.set(invite.guild.id, guildInvites);
 });
 
-// Monitorizăm când intră un membru pentru a afla ce invitație a folosit
 client.on('guildMemberAdd', async (member) => {
     try {
         const newInvites = await member.guild.invites.fetch();
         const oldInvites = invitesCache.get(member.guild.id);
-        
         let inviterUser = null;
         
         if (oldInvites) {
             const usedInvite = newInvites.find(i => oldInvites.has(i.code) && i.uses > oldInvites.get(i.code));
-            if (usedInvite) {
-                inviterUser = usedInvite.inviter;
-            }
+            if (usedInvite) inviterUser = usedInvite.inviter;
         }
         
-        // Salvăm la zi cache-ul cu noile utilizări
         invitesCache.set(member.guild.id, new Map(newInvites.map(invite => [invite.code, invite.uses])));
 
         if (inviterUser) {
             let data = JSON.parse(fs.readFileSync(INVITES_FILE, 'utf8'));
-            if (!data[inviterUser.id]) data[inviterUser.id] = { regular: 0, leaves: 0 };
-            
+            if (!data[inviterUser.id]) data[inviterUser.id] = { regular: 0 };
             data[inviterUser.id].regular += 1;
             fs.writeFileSync(INVITES_FILE, JSON.stringify(data, null, 2));
         }
     } catch (err) {
-        console.error('Eroare la procesarea invitației la intrarea unui membru:', err);
+        console.error(err);
     }
-});
-
-// Când pleacă cineva de pe server, scădem la statistici (optional, ca să nu trișeze cu conturi fake)
-client.on('guildMemberRemove', async (member) => {
-    // Putem opțional să căutăm în istoric, dar cel mai sigur sistemul de bază ține evidența intrărilor clare
 });
 
 client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand()) {
         const { commandName, options, guild } = interaction;
 
-        // --- TICKETS SETUP & MODERARE (Băgate anterior) ---
         if (commandName === 'setup-ticket') {
             await interaction.deferReply({ ephemeral: true });
             const ticketEmbed = new EmbedBuilder()
@@ -244,70 +218,32 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.reply({ embeds: [new EmbedBuilder().setTitle(`📋 Warn-uri: ${user.tag}`).setDescription(list).setColor('#ffff00')] });
         }
 
-
-        // --- LOGICĂ COMENZI NOI DE INVITES ---
-
-        // 1. /invites
         if (commandName === 'invites') {
             const targetUser = options.getUser('user') || interaction.user;
             let data = JSON.parse(fs.readFileSync(INVITES_FILE, 'utf8'));
-            
             const userInvites = data[targetUser.id] ? data[targetUser.id].regular : 0;
-
-            const embed = new EmbedBuilder()
-                .setTitle(`📊 Invitații: ${targetUser.username}`)
-                .setDescription(`Membru: ${targetUser}\nAre în prezent: **${userInvites} invitații** valide pe acest server! 📈`)
-                .setColor('#00ffcc');
-
+            const embed = new EmbedBuilder().setTitle(`📊 Invitații: ${targetUser.username}`).setDescription(`Membru: ${targetUser}\nAre în prezent: **${userInvites} invitații** valide!`).setColor('#00ffcc');
             return interaction.reply({ embeds: [embed] });
         }
 
-        // 2. /invites-leaderboard
         if (commandName === 'invites-leaderboard') {
             let data = JSON.parse(fs.readFileSync(INVITES_FILE, 'utf8'));
-            
-            // Sortăm userii în funcție de numărul de invitații
-            const sorted = Object.entries(data)
-                .map(([id, info]) => ({ id, regular: info.regular }))
-                .sort((a, b) => b.regular - a.regular)
-                .slice(0, 10); // Prindem doar top 10
-
-            if (sorted.length === 0) {
-                return interaction.reply({ content: 'ℹ️ Deocamdată nu s-au înregistrat invitații valide în baza mea de date.' });
-            }
-
+            const sorted = Object.entries(data).map(([id, info]) => ({ id, regular: info.regular })).sort((a, b) => b.regular - a.regular).slice(0, 10);
+            if (sorted.length === 0) return interaction.reply({ content: 'ℹ️ Nu există invitații înregistrate.' });
             let leaderboardText = '';
             sorted.forEach((user, index) => {
                 let medal = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : '🔹'));
                 leaderboardText += `${medal} **Top ${index + 1}:** <@${user.id}> — \`${user.regular}\` invitații\n`;
             });
-
-            const embed = new EmbedBuilder()
-                .setTitle('🏆 Top Invitații Server (Leaderboard)')
-                .setDescription(leaderboardText)
-                .setColor('#ffcc00')
-                .setTimestamp();
-
-            return interaction.reply({ embeds: [embed] });
+            return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🏆 Top Invitații (Leaderboard)').setDescription(leaderboardText).setColor('#ffcc00')] });
         }
 
-        // 3. /invites-reset
         if (commandName === 'invites-reset') {
-            fs.writeFileSync(INVITES_FILE, JSON.stringify({})); // Ștergem tot fișierul
-            
-            // Reîmprospătăm și memoria temporară
-            for (const [guildId, guild] of client.guilds.cache) {
-                try {
-                    const guildInvites = await guild.invites.fetch();
-                    invitesCache.set(guild.id, new Map(guildInvites.map(invite => [invite.code, invite.uses])));
-                } catch (err) {}
-            }
-
-            return interaction.reply({ content: '✅ Baza de date a invitațiilor a fost resetată complet de către Administrator!' });
+            fs.writeFileSync(INVITES_FILE, JSON.stringify({}));
+            return interaction.reply({ content: '✅ Baza de date a invitațiilor a fost resetată complet!' });
         }
     }
 
-    // 3. Sistemul de tichete (Butoane)
     if (interaction.isButton()) {
         const { customId, guild, user } = interaction;
         if (['ticket_support', 'ticket_purchase', 'ticket_claim'].includes(customId)) {
@@ -324,15 +260,8 @@ client.on('interactionCreate', async (interaction) => {
                 ],
             });
 
-            const welcomeEmbed = new EmbedBuilder()
-                .setTitle(`🎫 Ticket ${typeLabel.toUpperCase()}`)
-                .setDescription(`Salut ${user}!\n\nUn membru din staff (<@&${STAFF_ROLE_ID}>) va ajunge în cel mai scurt timp.\nApasă butonul roșu pentru a închide.`)
-                .setColor('#ffcc00');
-
-            const closeRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger)
-            );
-
+            const welcomeEmbed = new EmbedBuilder().setTitle(`🎫 Ticket ${typeLabel.toUpperCase()}`).setDescription(`Salut ${user}!\n\nUn membru din staff (<@&${STAFF_ROLE_ID}>) va ajunge în cel mai scurt timp.`).setColor('#ffcc00');
+            const closeRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger));
             await ticketChannel.send({ content: `${user} | <@&${STAFF_ROLE_ID}>`, embeds: [welcomeEmbed], components: [closeRow] });
             await interaction.editReply({ content: `Creată în ${ticketChannel}!`, ephemeral: true });
         }
@@ -345,4 +274,4 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-        
+                
