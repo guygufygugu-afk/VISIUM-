@@ -1,12 +1,13 @@
 const http = require('http');
-http.createServer((req, res) => res.end("Botul este online!")).listen(process.env.PORT || 3000);
+http.createServer((req, res) => res.end("VISIUM Bot is Online!")).listen(process.env.PORT || 3000);
+
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, REST, Routes, SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildInvites] });
 const STAFF_ROLE_ID = "1490701828831052027"; 
-const SUGESTII_CHANNEL_ID = "1514651853348929738"; // ID-ul canalului tău salvat corect
+const SUGESTII_CHANNEL_ID = "1514651853348929738"; 
 const WARNS_FILE = path.join('/tmp', 'warns.json');
 const INVITES_FILE = path.join('/tmp', 'invites.json');
 
@@ -159,7 +160,7 @@ client.on('interactionCreate', async (i) => {
         const id = i.fields.getTextInputValue('s_id'), aj = i.fields.getTextInputValue('s_aj');
         const targetChannel = i.guild.channels.cache.get(SUGESTII_CHANNEL_ID);
         
-        if (!targetChannel) return i.reply({ content: '❌ Canalul de sugestii configurat nu a fost găsit pe server!', ephemeral: true });
+        if (!targetChannel) return i.reply({ content: '❌ Canalul de sugestii nu a fost găsit pe server! Reintrodu codul sau verifică permisiunile botului.', ephemeral: true });
         await i.reply({ content: '✅ Formular trimis cu succes în canalul dedicat!', ephemeral: true });
         
         return targetChannel.send({ 
@@ -170,4 +171,4 @@ client.on('interactionCreate', async (i) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-    
+                                                                                                                                                                                                
