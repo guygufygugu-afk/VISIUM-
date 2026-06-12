@@ -24,7 +24,7 @@ if (!fs.existsSync(INVITES_FILE)) fs.writeFileSync(INVITES_FILE, JSON.stringify(
 const invitesCache = new Map();
 
 client.once('ready', async () => {
-    console.log(`🤖 ${client.user.tag} ruliază stabil cu toate sistemele sincronizate!`);
+    console.log(`🤖 ${client.user.tag} rulează stabil cu toate sistemele sincronizate!`);
 
     for (const [guildId, guild] of client.guilds.cache) {
         try {
@@ -158,7 +158,7 @@ client.on('interactionCreate', async (interaction) => {
         // --- SCOATERE WARN INDIVIDUAL / CANTITATE ---
         if (commandName === 'unwarn') {
             const targetUser = options.getUser('user');
-            let cantitate = options.getInteger('cantitate') || 1;
+            let cantitate = options.getInteger('cantitate') ?? 1;
             let data = JSON.parse(fs.readFileSync(WARNS_FILE, 'utf8'));
 
             if (!data[targetUser.id] || data[targetUser.id].length === 0) {
@@ -167,7 +167,6 @@ client.on('interactionCreate', async (interaction) => {
 
             if (cantitate < 1) cantitate = 1;
             
-            // Eliminăm numărul cerut de avertismente din coadă
             let eliminate = 0;
             for (let i = 0; i < cantitate; i++) {
                 if (data[targetUser.id] && data[targetUser.id].length > 0) {
@@ -176,7 +175,7 @@ client.on('interactionCreate', async (interaction) => {
                 }
             }
 
-            const ramase = data[targetUser.id].length;
+            const ramase = data[targetUser.id] ? data[targetUser.id].length : 0;
             if (ramase === 0) delete data[targetUser.id];
 
             fs.writeFileSync(WARNS_FILE, JSON.stringify(data, null, 2));
@@ -253,45 +252,4 @@ client.on('interactionCreate', async (interaction) => {
         if (commandName === 'warn') {
             const u = options.getUser('user'); const r = options.getString('reason') || 'Fără motiv specificat';
             let d = JSON.parse(fs.readFileSync(WARNS_FILE, 'utf8')); if (!d[u.id]) d[u.id] = [];
-            d[u.id].push({ staff: user.tag, reason: r, date: new Date().toLocaleDateString() }); fs.writeFileSync(WARNS_FILE, JSON.stringify(d, null, 2));
-            return interaction.reply({ embeds: [new EmbedBuilder().setTitle('⚠️ Warn').setDescription(`**Membru:** ${u}\n**Staff:** ${user}\n**Motiv:** ${r}\n**Total:** \`${d[u.id].length}\``).setColor('#ffff00')] });
-        }
-        if (commandName === 'warns') {
-            const u = options.getUser('user'); let d = JSON.parse(fs.readFileSync(WARNS_FILE, 'utf8'));
-            if (!d[u.id] || d[u.id].length === 0) return interaction.reply({ content: `ℹ️ ${u.tag} nu are niciun avertisment.` });
-            let l = d[u.id].map((w, i) => `**${i + 1}.** Staff: \`${w.staff}\` | Motiv: \`${w.reason}\` (${w.date})`).join('\n');
-            return interaction.reply({ embeds: [new EmbedBuilder().setTitle(`📋 Warn-uri: ${u.tag}`).setDescription(l).setColor('#ffff00')] });
-        }
-        if (commandName === 'invites') {
-            const t = options.getUser('user') || user; let d = JSON.parse(fs.readFileSync(INVITES_FILE, 'utf8'));
-            return interaction.reply({ embeds: [new EmbedBuilder().setTitle(`📊 Invites`).setDescription(`${t} are **${d[t.id] ? d[t.id].regular : 0}** invitații.`).setColor('#00ffcc')] });
-        }
-        if (commandName === 'invites-leaderboard') {
-            let d = JSON.parse(fs.readFileSync(INVITES_FILE, 'utf8'));
-            const s = Object.entries(d).map(([id, info]) => ({ id, regular: info.regular })).sort((a, b) => b.regular - a.regular).slice(0, 10);
-            if (s.length === 0) return interaction.reply({ content: 'ℹ️ Fără date.' });
-            let txt = ''; s.forEach((u, i) => { txt += `${i===0?'🥇':i===1?'🥈':i===2?'🥉':'🔹'} <@${u.id}> — \`${u.regular}\` invites\n`; });
-            return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🏆 Leaderboard').setDescription(txt).setColor('#ffcc00')] });
-        }
-        if (commandName === 'invites-reset') { fs.writeFileSync(INVITES_FILE, JSON.stringify({})); return interaction.reply({ content: '✅ Resetat!' }); }
-    }
-
-    // --- LOGICĂ BUTOANE INTERACTIVE ȘI SUBMIT MODAL ---
-    if (interaction.isButton()) {
-        const { customId, guild, user, message } = interaction;
-
-        if (customId === 'deschide_formular_sugestie') {
-            const modal = new ModalBuilder().setCustomId('modal_sugestie').setTitle('Trimite o sugestie');
-            const intrebi1 = new TextInputBuilder().setCustomId('sugestie_continut').setLabel('Ce sugestie ai?').setStyle(TextInputStyle.Paragraph).setPlaceholder('Descrie ideea ta aici...').setRequired(true);
-            const intrebi2 = new TextInputBuilder().setCustomId('sugestie_ajutor').setLabel('Cu ce va ajuta serverul sugestia?').setStyle(TextInputStyle.Paragraph).setPlaceholder('Cum îmbunătățește experiența membrilor?').setRequired(true);
-            modal.addComponents(new ActionRowBuilder().addComponents(intrebi1), new ActionRowBuilder().addComponents(intrebi2));
-            return await interaction.showModal(modal);
-        }
-
-        if (customId === 'sugestie_da' || customId === 'sugestie_nu') {
-            await interaction.deferUpdate();
-            const oldEmbed = message.embeds[0]; const oldComponents = message.components[0].components;
-            let voturiDa = parseInt(oldComponents[0].label.match(/\d+/)[0]); let voturiNu = parseInt(oldComponents[1].label.match(/\d+/)[0]);
-            if (customId === 'sugestie_da') voturiDa++;
-            if (customId === 'sugest
-        
+               
