@@ -5,9 +5,18 @@ const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder
 const fs = require('fs');
 const path = require('path');
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildInvites] });
+const client = new Client({ 
+    intents: [
+        GatewayIntentBits.Guilds, 
+        GatewayIntentBits.GuildMessages, 
+        GatewayIntentBits.GuildMembers, 
+        GatewayIntentBits.GuildInvites
+    ]
+});
+
 const STAFF_ROLE_ID = "1490701828831052027"; 
 const SUGESTII_CHANNEL_ID = "1514651853348929738"; 
+
 const WARNS_FILE = path.join('/tmp', 'warns.json');
 const INVITES_FILE = path.join('/tmp', 'invites.json');
 
@@ -16,13 +25,16 @@ if (!fs.existsSync(INVITES_FILE)) fs.writeFileSync(INVITES_FILE, JSON.stringify(
 const invitesCache = new Map();
 
 client.once('ready', async () => {
-    console.log(`🤖 ${client.user.tag} este online și stabil!`);
+    console.log(`🤖 ${client.user.tag} este online, securizat și pregătit pentru utilizare!`);
     for (const [_, guild] of client.guilds.cache) {
         try { const gi = await guild.invites.fetch(); invitesCache.set(guild.id, new Map(gi.map(i => [i.code, i.uses]))); } catch {}
     }
+    
     const commands = [
         new SlashCommandBuilder().setName('setup-ticket').setDescription('Panou tichete VISIUM').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
         new SlashCommandBuilder().setName('setup-sugestii').setDescription('Panou Sugestii cu Formular').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+        new SlashCommandBuilder().setName('lock').setDescription('Blochează canalul curent pentru membrii simpli').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+        new SlashCommandBuilder().setName('unlock').setDescription('Deblochează canalul curent').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
         new SlashCommandBuilder().setName('ban').setDescription('Ban').addUserOption(o => o.setName('user').setDescription('Membru').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Motiv')).setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
         new SlashCommandBuilder().setName('kick').setDescription('Kick').addUserOption(o => o.setName('user').setDescription('Membru').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Motiv')).setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
         new SlashCommandBuilder().setName('mute').setDescription('Mute').addUserOption(o => o.setName('user').setDescription('Membru').setRequired(true)).addIntegerOption(o => o.setName('minutes').setDescription('Minute').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Motiv')).setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
@@ -35,6 +47,7 @@ client.once('ready', async () => {
         new SlashCommandBuilder().setName('invites-leaderboard').setDescription('Top invitații'),
         new SlashCommandBuilder().setName('invites-reset').setDescription('Reset invitații').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     ].map(cmd => cmd.toJSON());
+
     try { await new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN).put(Routes.applicationCommands(client.user.id), { body: commands }); console.log('✅ Comenzi sincronizate!'); } catch (e) { console.error(e); }
 });
 
@@ -50,7 +63,23 @@ client.on('guildMemberAdd', async (m) => {
 
 client.on('interactionCreate', async (i) => {
     if (i.isChatInputCommand()) {
-        const { commandName: cmd, options: opts, guild, user } = i;
+        const { commandName: cmd, options: opts, guild, user, channel } = i;
+        const member = guild.members.cache.get(user.id);
+
+        // PROTECȚIE CONSOLIDATĂ: Dacă nu au rolul de Staff sau Administrator, comanda se oprește aici
+        const comenziStaff = ['ban', 'kick', 'mute', 'unmute', 'warn', 'unwarn', 'clearwarns', 'lock', 'unlock', 'setup-sugestii', 'setup-ticket', 'invites-reset'];
+        if (comenziStaff.includes(cmd) && !member.roles.cache.has(STAFF_ROLE_ID) && !member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return i.reply({ content: '❌ **Acces Refuzat!** Această comandă este rezervată exclusiv echipei Staff VISIUM.', ephemeral: true });
+        }
+
+        if (cmd === 'lock') {
+            await channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false });
+            return i.reply({ content: `🔒 Canalul ${channel} a fost blocat cu succes!` });
+        }
+        if (cmd === 'unlock') {
+            await channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: null });
+            return i.reply({ content: `🔓 Canalul ${channel} a fost deblocat!` });
+        }
         if (cmd === 'unwarn') {
             const u = opts.getUser('user'); let c = opts.getInteger('cantitate') ?? 1; let d = JSON.parse(fs.readFileSync(WARNS_FILE, 'utf-8'));
             if (!d[u.id] || d[u.id].length === 0) return i.reply({ content: `ℹ️ ${u.tag} nu are warn-uri.`, ephemeral: true });
@@ -160,7 +189,7 @@ client.on('interactionCreate', async (i) => {
         const id = i.fields.getTextInputValue('s_id'), aj = i.fields.getTextInputValue('s_aj');
         const targetChannel = i.guild.channels.cache.get(SUGESTII_CHANNEL_ID);
         
-        if (!targetChannel) return i.reply({ content: '❌ Canalul de sugestii nu a fost găsit pe server! Reintrodu codul sau verifică permisiunile botului.', ephemeral: true });
+        if (!targetChannel) return i.reply({ content: '❌ Canalul de sugestii nu a fost găsit pe server!', ephemeral: true });
         await i.reply({ content: '✅ Formular trimis cu succes în canalul dedicat!', ephemeral: true });
         
         return targetChannel.send({ 
@@ -171,4 +200,4 @@ client.on('interactionCreate', async (i) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-                                                                                                                                                                                                
+                                                                                                                                                                              
