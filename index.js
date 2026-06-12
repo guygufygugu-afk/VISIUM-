@@ -2,254 +2,162 @@ const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder
 const fs = require('fs');
 const path = require('path');
 
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildInvites
-    ]
-});
-
-// ID-ul oficial de Staff pentru tichete:
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildInvites] });
 const STAFF_ROLE_ID = "1490701828831052027"; 
-
-// Directoare de stocare compatibile cu mediul Render /tmp
 const WARNS_FILE = path.join('/tmp', 'warns.json');
 const INVITES_FILE = path.join('/tmp', 'invites.json');
 
 if (!fs.existsSync(WARNS_FILE)) fs.writeFileSync(WARNS_FILE, JSON.stringify({}));
 if (!fs.existsSync(INVITES_FILE)) fs.writeFileSync(INVITES_FILE, JSON.stringify({}));
-
 const invitesCache = new Map();
 
 client.once('ready', async () => {
-    console.log(`🤖 ${client.user.tag} rulează stabil cu toate sistemele sincronizate!`);
-
-    for (const [guildId, guild] of client.guilds.cache) {
-        try {
-            const guildInvites = await guild.invites.fetch();
-            invitesCache.set(guild.id, new Map(guildInvites.map(invite => [invite.code, invite.uses])));
-        } catch (err) {}
+    console.log(`🤖 ${client.user.tag} este online și stabil!`);
+    for (const [_, guild] of client.guilds.cache) {
+        try { const gi = await guild.invites.fetch(); invitesCache.set(guild.id, new Map(gi.map(i => [i.code, i.uses]))); } catch {}
     }
-
     const commands = [
-        new SlashCommandBuilder()
-            .setName('setup-ticket')
-            .setDescription('Generează panoul premium de tichete VISIUM')
-            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-        new SlashCommandBuilder()
-            .setName('setup-sugestii')
-            .setDescription('Generează panoul premium fix pentru Sugestii (cu Formular)')
-            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-        new SlashCommandBuilder()
-            .setName('ban')
-            .setDescription('Dă ban unui membru de pe server')
-            .addUserOption(option => option.setName('user').setDescription('Membrul căruia îi dai ban').setRequired(true))
-            .addStringOption(option => option.setName('reason').setDescription('Motivul banului').setRequired(false))
-            .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
-
-        new SlashCommandBuilder()
-            .setName('kick')
-            .setDescription('Dă afară un membru de pe server')
-            .addUserOption(option => option.setName('user').setDescription('Membrul dat afară').setRequired(true))
-            .addStringOption(option => option.setName('reason').setDescription('Motivul').setRequired(false))
-            .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
-
-        new SlashCommandBuilder()
-            .setName('mute')
-            .setDescription('Pune mut unui membru (Timeout)')
-            .addUserOption(option => option.setName('user').setDescription('Membrul pe care îl pui pe mut').setRequired(true))
-            .addIntegerOption(option => option.setName('minutes').setDescription('Durata în minute').setRequired(true))
-            .addStringOption(option => option.setName('reason').setDescription('Motivul').setRequired(false))
-            .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
-
-        new SlashCommandBuilder()
-            .setName('unmute')
-            .setDescription('Scoate mutul unui membru')
-            .addUserOption(option => option.setName('user').setDescription('Membrul').setRequired(true))
-            .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
-
-        new SlashCommandBuilder()
-            .setName('warn')
-            .setDescription('Avertizează un membru')
-            .addUserOption(option => option.setName('user').setDescription('Membrul avertizat').setRequired(true))
-            .addStringOption(option => option.setName('reason').setDescription('Motivul avertismentului').setRequired(false))
-            .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
-
-        new SlashCommandBuilder()
-            .setName('unwarn')
-            .setDescription('Scoate un număr specific de avertismente unui membru')
-            .addUserOption(option => option.setName('user').setDescription('Membrul căruia îi scazi warn-urile').setRequired(true))
-            .addIntegerOption(option => option.setName('cantitate').setDescription('Câte warn-uri ștergi (implicit 1)').setRequired(false))
-            .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
-
-        new SlashCommandBuilder()
-            .setName('clearwarns')
-            .setDescription('Șterge ABSOLUT TOATE avertismentele unui utilizator')
-            .addUserOption(option => option.setName('user').setDescription('Membrul căruia îi cureți istoricul').setRequired(true))
-            .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
-
-        new SlashCommandBuilder()
-            .setName('warns')
-            .setDescription('Verifică câte avertismente are un membru')
-            .addUserOption(option => option.setName('user').setDescription('Membrul').setRequired(true))
-            .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
-
-        new SlashCommandBuilder()
-            .setName('invites')
-            .setDescription('Verifică câte invitații ai tu sau alt membru')
-            .addUserOption(option => option.setName('user').setDescription('Membrul căruia vrei să îi vezi invitațiile').setRequired(false)),
-
-        new SlashCommandBuilder()
-            .setName('invites-leaderboard')
-            .setDescription('Arată topul membrilor cu cele mai multe invitații active'),
-
-        new SlashCommandBuilder()
-            .setName('invites-reset')
-            .setDescription('Resetează baza de date cu invitații (Doar Admini)')
-            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        new SlashCommandBuilder().setName('setup-ticket').setDescription('Panou tichete VISIUM').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+        new SlashCommandBuilder().setName('setup-sugestii').setDescription('Panou Sugestii cu Formular').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+        new SlashCommandBuilder().setName('ban').setDescription('Ban').addUserOption(o => o.setName('user').setDescription('Membru').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Motiv')).setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
+        new SlashCommandBuilder().setName('kick').setDescription('Kick').addUserOption(o => o.setName('user').setDescription('Membru').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Motiv')).setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
+        new SlashCommandBuilder().setName('mute').setDescription('Mute').addUserOption(o => o.setName('user').setDescription('Membru').setRequired(true)).addIntegerOption(o => o.setName('minutes').setDescription('Minute').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Motiv')).setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+        new SlashCommandBuilder().setName('unmute').setDescription('Unmute').addUserOption(o => o.setName('user').setDescription('Membru').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+        new SlashCommandBuilder().setName('warn').setDescription('Warn').addUserOption(o => o.setName('user').setDescription('Membru').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Motiv')).setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+        new SlashCommandBuilder().setName('unwarn').setDescription('Scoate warn-uri').addUserOption(o => o.setName('user').setDescription('Membru').setRequired(true)).addIntegerOption(o => o.setName('cantitate').setDescription('Câte (implicit 1)')).setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+        new SlashCommandBuilder().setName('clearwarns').setDescription('Șterge toate warn-urile').addUserOption(o => o.setName('user').setDescription('Membru').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+        new SlashCommandBuilder().setName('warns').setDescription('Vezi warn-uri').addUserOption(o => o.setName('user').setDescription('Membru').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+        new SlashCommandBuilder().setName('invites').setDescription('Vezi invitații').addUserOption(o => o.setName('user').setDescription('Membru')),
+        new SlashCommandBuilder().setName('invites-leaderboard').setDescription('Top invitații'),
+        new SlashCommandBuilder().setName('invites-reset').setDescription('Reset invitații').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     ].map(cmd => cmd.toJSON());
+    try { await new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN).put(Routes.applicationCommands(client.user.id), { body: commands }); console.log('✅ Comenzi sincronizate!'); } catch (e) { console.error(e); }
+});
 
-    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-
+client.on('inviteCreate', async (inv) => { const c = invitesCache.get(inv.guild.id) || new Map(); c.set(inv.code, inv.uses); invitesCache.set(inv.guild.id, c); });
+client.on('guildMemberAdd', async (m) => {
     try {
-        console.log('🔄 Actualizăm setul complet de comenzi în cache-ul global...');
-        await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log('✅ Reînregistrare reușită! Sistemele de Unwarn și Clearwarns sunt active.');
-    } catch (error) {
-        console.error(error);
+        const ni = await m.guild.invites.fetch(), oi = invitesCache.get(m.guild.id); let inviter = null;
+        if (oi) { const u = ni.find(i => oi.has(i.code) && i.uses > oi.get(i.code)); if (u) inviter = u.inviter; }
+        invitesCache.set(m.guild.id, new Map(ni.map(i => [i.code, i.uses])));
+        if (inviter) { let d = JSON.parse(fs.readFileSync(INVITES_FILE, 'utf-8')); d[inviter.id] = d[inviter.id] || { regular: 0 }; d[inviter.id].regular++; fs.writeFileSync(INVITES_FILE, JSON.stringify(d, null, 2)); }
+    } catch {}
+});
+
+client.on('interactionCreate', async (i) => {
+    if (i.isChatInputCommand()) {
+        const { commandName: cmd, options: opts, guild, user } = i;
+        if (cmd === 'unwarn') {
+            const u = opts.getUser('user'); let c = opts.getInteger('cantitate') ?? 1; let d = JSON.parse(fs.readFileSync(WARNS_FILE, 'utf-8'));
+            if (!d[u.id] || d[u.id].length === 0) return i.reply({ content: `ℹ️ ${u.tag} nu are warn-uri.`, ephemeral: true });
+            let el = 0; for (let j = 0; j < (c < 1 ? 1 : c); j++) { if (d[u.id] && d[u.id].length > 0) { d[u.id].pop(); el++; } }
+            const ramase = d[u.id].length; if (ramase === 0) delete d[u.id]; fs.writeFileSync(WARNS_FILE, JSON.stringify(d, null, 2));
+            return i.reply({ content: `✅ S-au eliminat \`${el}\` warn-uri pentru ${u}.\n📉 Rămase: \`${ramase}\`` });
+        }
+        if (cmd === 'clearwarns') {
+            const u = opts.getUser('user'); let d = JSON.parse(fs.readFileSync(WARNS_FILE, 'utf-8'));
+            if (!d[u.id]) return i.reply({ content: `ℹ️ ${u.tag} are deja cazierul curat.`, ephemeral: true });
+            delete d[u.id]; fs.writeFileSync(WARNS_FILE, JSON.stringify(d, null, 2));
+            return i.reply({ content: `🧹 Toate avertismentele lui ${u} au fost șterse de ${user}!` });
+        }
+        if (cmd === 'setup-sugestii') {
+            await i.deferReply({ ephemeral: true });
+            const emb = new EmbedBuilder().setTitle('💡 Trimite o Sugestie').setDescription('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n**💭 Ai o idee? Trimite-o apăsând butonul de mai jos.**\n\n* Completează formularul.\n* Comunitatea va putea vota ideea ta.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━').setColor('#7289da');
+            await i.channel.send({ embeds: [emb], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('btn_sug').setLabel('📝 Trimite Sugestie').setStyle(ButtonStyle.Primary))] });
+            return i.editReply({ content: '✅ Panou generat!' });
+        }
+        if (cmd === 'setup-ticket') {
+            await i.deferReply({ ephemeral: true });
+            const emb = new EmbedBuilder().setTitle('VISIUM Support Panel').setDescription('━━━━━━━\n**👷 Support**\n**🏦 Purchase**\n**🎁 Claim Reward**\n━━━━━━━').setColor('#0099ff');
+            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('tk_support').setLabel('Support').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('tk_purchase').setLabel('Purchase').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('tk_claim').setLabel('Claim Reward').setStyle(ButtonStyle.Secondary));
+            await i.channel.send({ embeds: [emb], components: [row] }); return i.editReply({ content: '✅ Panou generat!' });
+        }
+        if (cmd === 'ban') {
+            const u = opts.getUser('user'), r = opts.getString('reason') || 'Fără motiv', m = guild.members.cache.get(u.id);
+            if (!m || !m.bannable) return i.reply({ content: '❌ Imposibil!', ephemeral: true }); await m.ban({ reason: r });
+            return i.reply({ embeds: [new EmbedBuilder().setTitle('🔨 Ban').setDescription(`**Membru:** ${u.tag}\n**Staff:** ${user}\n**Motiv:** ${r}`).setColor('#ff0000')] });
+        }
+        if (cmd === 'kick') {
+            const u = opts.getUser('user'), r = opts.getString('reason') || 'Fără motiv', m = guild.members.cache.get(u.id);
+            if (!m || !m.kickable) return i.reply({ content: '❌ Imposibil!', ephemeral: true }); await m.kick(r);
+            return i.reply({ embeds: [new EmbedBuilder().setTitle('👢 Kick').setDescription(`**Membru:** ${u.tag}\n**Staff:** ${user}\n**Motiv:** ${r}`).setColor('#ffaa00')] });
+        }
+        if (cmd === 'mute') {
+            const u = opts.getUser('user'), min = opts.getInteger('minutes'), r = opts.getString('reason') || 'Fără motiv', m = guild.members.cache.get(u.id);
+            if (!m) return i.reply({ content: '❌ Nu e pe server!', ephemeral: true }); await m.timeout(min * 60 * 1000, r);
+            return i.reply({ embeds: [new EmbedBuilder().setTitle('🤫 Mute').setDescription(`**Membru:** ${u.tag}\n**Durată:** ${min} min\n**Staff:** ${user}`).setColor('#333333')] });
+        }
+        if (cmd === 'unmute') {
+            const m = guild.members.cache.get(opts.getUser('user').id); if (!m) return i.reply({ content: '❌ Nu e pe server!' }); await m.timeout(null);
+            return i.reply({ content: `🔊 Mutul a fost scos!` });
+        }
+        if (cmd === 'warn') {
+            const u = opts.getUser('user'), r = opts.getString('reason') || 'Fără motiv'; let d = JSON.parse(fs.readFileSync(WARNS_FILE, 'utf-8'));
+            d[u.id] = d[u.id] || []; d[u.id].push({ staff: user.tag, reason: r, date: new Date().toLocaleDateString() }); fs.writeFileSync(WARNS_FILE, JSON.stringify(d, null, 2));
+            return i.reply({ embeds: [new EmbedBuilder().setTitle('⚠️ Warn').setDescription(`**Membru:** ${u}\n**Staff:** ${user}\n**Motiv:** ${r}\n**Total:** \`${d[u.id].length}\``).setColor('#ffff00')] });
+        }
+        if (cmd === 'warns') {
+            const u = opts.getUser('user'); let d = JSON.parse(fs.readFileSync(WARNS_FILE, 'utf-8'));
+            if (!d[u.id] || d[u.id].length === 0) return i.reply({ content: `ℹ️ ${u.tag} nu are avertismente.` });
+            return i.reply({ embeds: [new EmbedBuilder().setTitle(`📋 Warn-uri: ${u.tag}`).setDescription(d[u.id].map((w, idx) => `**${idx + 1}.** Staff: \`${w.staff}\` | Motiv: \`${w.reason}\` (${w.date})`).join('\n')).setColor('#ffff00')] });
+        }
+        if (cmd === 'invites') {
+            const t = opts.getUser('user') || user; let d = JSON.parse(fs.readFileSync(INVITES_FILE, 'utf-8'));
+            return i.reply({ embeds: [new EmbedBuilder().setTitle(`📊 Invites`).setDescription(`${t} are **${d[t.id] ? d[t.id].regular : 0}** invitații.`).setColor('#00ffcc')] });
+        }
+        if (cmd === 'invites-leaderboard') {
+            let d = JSON.parse(fs.readFileSync(INVITES_FILE, 'utf-8'));
+            const s = Object.entries(d).map(([id, info]) => ({ id, regular: info.regular })).sort((a, b) => b.regular - a.regular).slice(0, 10);
+            if (s.length === 0) return i.reply({ content: 'ℹ️ Fără date.' }); let txt = '';
+            s.forEach((u, idx) => { txt += `${idx===0?'🥇':idx===1?'🥈':idx===2?'🥉':'🔹'} <@${u.id}> — \`${u.regular}\` invitații\n`; });
+            return i.reply({ embeds: [new EmbedBuilder().setTitle('🏆 Leaderboard').setDescription(txt).setColor('#ffcc00')] });
+        }
+        if (cmd === 'invites-reset') { fs.writeFileSync(INVITES_FILE, JSON.stringify({})); return i.reply({ content: '✅ Resetat!' }); }
+    }
+
+    if (i.isButton()) {
+        const { customId: cid, guild, user, message: msg } = i;
+        if (cid === 'btn_sug') {
+            const modal = new ModalBuilder().setCustomId('md_sug').setTitle('Trimite o sugestie');
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('s_id').setLabel('Ce sugestie ai?').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('s_aj').setLabel('Cu ce va ajuta serverul?').setStyle(TextInputStyle.Paragraph).setRequired(true))
+            );
+            return await i.showModal(modal);
+        }
+        if (cid === 's_da' || cid === 's_nu') {
+            await i.deferUpdate(); const emb = msg.embeds[0], comp = msg.components[0].components;
+            let da = parseInt(comp[0].label.match(/\d+/)[0]), nu = parseInt(comp[1].label.match(/\d+/)[0]);
+            if (cid === 's_da') da++; else nu++;
+            const nEmb = EmbedBuilder.from(emb).setFields(
+                { name: emb.fields[0].name, value: emb.fields[0].value },
+                { name: emb.fields[1].name, value: emb.fields[1].value },
+                { name: '📊 Status Voturi:', value: `✅ Aprobări: \`${da}\` | ❌ Respingeri: \`${nu}\`` }
+            );
+            return msg.edit({ embeds: [nEmb], components: [new ActionRowBuilder().addComponents(ButtonBuilder.from(comp[0]).setLabel(`Aprobă (${da})`), ButtonBuilder.from(comp[1]).setLabel(`Respinge (${nu})`))] });
+        }
+        if (['tk_support', 'tk_purchase', 'tk_claim'].includes(cid)) {
+            await i.deferReply({ ephemeral: true }); let lbl = cid === 'tk_purchase' ? 'purchase' : (cid === 'tk_claim' ? 'claim' : 'support');
+            const ch = await guild.channels.create({
+                name: `${lbl}-${user.username}`, type: ChannelType.GuildText,
+                permissionOverwrites: [
+                    { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+                    { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
+                    { id: STAFF_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }
+                ]
+            });
+            await ch.send({ content: `${user} | <@&${STAFF_ROLE_ID}>`, embeds: [new EmbedBuilder().setTitle(`🎫 Ticket ${lbl.toUpperCase()}`).setDescription(`Salut ${user}!\n\nStaff-ul te va ajuta imediat.`).setColor('#ffcc00')], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('tk_close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger))] });
+            return i.editReply({ content: `Creat în ${ch}!` });
+        }
+        if (cid === 'tk_close') { await i.reply({ content: 'Șterg în 5 secunde...' }); setTimeout(async () => { await i.channel.delete().catch(() => {}); }, 5000); }
+    }
+
+    if (i.isModalSubmit() && i.customId === 'md_sug') {
+        const id = i.fields.getTextInputValue('s_id'), aj = i.fields.getTextInputValue('s_aj'), ch = i.guild.channels.cache.find(c => c.name === 'sugestii' && c.type === ChannelType.GuildText);
+        if (!ch) return i.reply({ content: '❌ Canalul `sugestii` nu există!', ephemeral: true }); await i.reply({ content: '✅ Trimis!', ephemeral: true });
+        return ch.send({ embeds: [new EmbedBuilder().setTitle('💡 Sugestie Nouă').setThumbnail(i.user.displayAvatarURL({ dynamic: true })).setColor('#ffff00').addFields({ name: '📝 Sugestia mea:', value: `\`\`\`\n${id}\n\`\`\`` }, { name: '❓ Ajutor:', value: `\`\`\`\n${aj}\n\`\`\`` }, { name: '📊 Status Voturi:', value: '✅ Aprobări: `0` | ❌ Respingeri: `0`' }).setFooter({ text: `Trimis de: ${i.user.tag}` }).setTimestamp()], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('s_da').setLabel('Aprobă (0)').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('s_nu').setLabel('Respinge (0)').setStyle(ButtonStyle.Danger))] });
     }
 });
 
-client.on('inviteCreate', async (invite) => {
-    const guildInvites = invitesCache.get(invite.guild.id) || new Map();
-    guildInvites.set(invite.code, invite.uses);
-    invitesCache.set(invite.guild.id, guildInvites);
-});
-
-client.on('guildMemberAdd', async (member) => {
-    try {
-        const newInvites = await member.guild.invites.fetch();
-        const oldInvites = invitesCache.get(member.guild.id);
-        let inviterUser = null;
-        if (oldInvites) {
-            const usedInvite = newInvites.find(i => oldInvites.has(i.code) && i.uses > oldInvites.get(i.code));
-            if (usedInvite) inviterUser = usedInvite.inviter;
-        }
-        invitesCache.set(member.guild.id, new Map(newInvites.map(invite => [invite.code, invite.uses])));
-
-        if (inviterUser) {
-            let data = JSON.parse(fs.readFileSync(INVITES_FILE, 'utf8'));
-            if (!data[inviterUser.id]) data[inviterUser.id] = { regular: 0 };
-            data[inviterUser.id].regular += 1;
-            fs.writeFileSync(INVITES_FILE, JSON.stringify(data, null, 2));
-        }
-    } catch (err) {}
-});
-
-client.on('interactionCreate', async (interaction) => {
-    
-    if (interaction.isChatInputCommand()) {
-        const { commandName, options, guild, user } = interaction;
-
-        // --- SCOATERE WARN INDIVIDUAL / CANTITATE ---
-        if (commandName === 'unwarn') {
-            const targetUser = options.getUser('user');
-            let cantitate = options.getInteger('cantitate') ?? 1;
-            let data = JSON.parse(fs.readFileSync(WARNS_FILE, 'utf8'));
-
-            if (!data[targetUser.id] || data[targetUser.id].length === 0) {
-                return interaction.reply({ content: `ℹ️ ${targetUser.tag} nu are avertismente înregistrate.`, ephemeral: true });
-            }
-
-            if (cantitate < 1) cantitate = 1;
+client.login(process.env.DISCORD_TOKEN);
             
-            let eliminate = 0;
-            for (let i = 0; i < cantitate; i++) {
-                if (data[targetUser.id] && data[targetUser.id].length > 0) {
-                    data[targetUser.id].pop();
-                    eliminate++;
-                }
-            }
-
-            const ramase = data[targetUser.id] ? data[targetUser.id].length : 0;
-            if (ramase === 0) delete data[targetUser.id];
-
-            fs.writeFileSync(WARNS_FILE, JSON.stringify(data, null, 2));
-            return interaction.reply({ content: `✅ S-au eliminat \`${eliminate}\` avertismente pentru ${targetUser}.\n📉 În prezent mai are: \`${ramase}\` warn-uri.` });
-        }
-
-        // --- ȘTERGERE COMPLETĂ ISTORIC WARNS ---
-        if (commandName === 'clearwarns') {
-            const targetUser = options.getUser('user');
-            let data = JSON.parse(fs.readFileSync(WARNS_FILE, 'utf8'));
-
-            if (!data[targetUser.id] || data[targetUser.id].length === 0) {
-                return interaction.reply({ content: `ℹ️ Utilizatorul ${targetUser.tag} are deja cazierul curat.`, ephemeral: true });
-            }
-
-            delete data[targetUser.id];
-            fs.writeFileSync(WARNS_FILE, JSON.stringify(data, null, 2));
-            return interaction.reply({ content: `🧹 Cazier curățat complet! Toate avertismentele lui ${targetUser} au fost șterse de către ${user}.` });
-        }
-
-        // --- REZOLVARE COMANDE SUGESTII / TICKETS / MODERARE CURENTĂ ---
-        if (commandName === 'setup-sugestii') {
-            await interaction.deferReply({ ephemeral: true });
-            const embedSugestii = new EmbedBuilder()
-                .setTitle('💡 Trimite o Sugestie')
-                .setDescription('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n**💭 Ai o idee pentru server? Trimite sugestia ta apăsând pe butonul de mai jos.**\n\n**🎭 Cum funcționează?**\n* 📝 Apeși butonul și completezi formularul.\n* 📊 Se va genera automat un mesaj pentru votul comunității.\n* 👷 Staff-ul o va analiza și va decide statusul ei.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-                .setColor('#7289da')
-                .setFooter({ text: 'Ajută-ne să facem comunitatea mai bună!' });
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('deschide_formular_sugestie').setLabel('📝 Trimite Sugestie').setStyle(ButtonStyle.Primary)
-            );
-            await interaction.channel.send({ embeds: [embedSugestii], components: [row] });
-            return interaction.editReply({ content: '✅ Panou sugestii generat!' });
-        }
-
-        if (commandName === 'setup-ticket') {
-            await interaction.deferReply({ ephemeral: true });
-            const ticketEmbed = new EmbedBuilder()
-                .setTitle('VISIUM Support Panel')
-                .setDescription('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n** 👷Ai nevoie de ajutor? Deschide un ticket de support.**\n** 🏦Pentru cumpărare, apasă Purchase. Fără alte opțiuni.**\n** 🎁Ai de revendicat un reward? Deschide Claim Reward.**\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-                .setColor('#0099ff');
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('ticket_support').setLabel('Support').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('ticket_purchase').setLabel('Purchase').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('ticket_claim').setLabel('Claim Reward').setStyle(ButtonStyle.Secondary)
-            );
-            await interaction.channel.send({ embeds: [ticketEmbed], components: [row] });
-            return interaction.editReply({ content: '✅ Panou generat!' });
-        }
-
-        if (commandName === 'ban') {
-            const u = options.getUser('user'); const r = options.getString('reason') || 'Fără motiv specificat'; const m = guild.members.cache.get(u.id);
-            if (!m || !m.bannable) return interaction.reply({ content: '❌ Imposibil de executat!', ephemeral: true });
-            await m.ban({ reason: `${user.tag}: ${r}` });
-            return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🔨 Membru Banat').setDescription(`**Membru:** ${u.tag}\n**Staff:** ${user}\n**Motiv:** ${r}`).setColor('#ff0000')] });
-        }
-        if (commandName === 'kick') {
-            const u = options.getUser('user'); const r = options.getString('reason') || 'Fără motiv specificat'; const m = guild.members.cache.get(u.id);
-            if (!m || !m.kickable) return interaction.reply({ content: '❌ Imposibil de executat!', ephemeral: true });
-            await m.kick(`${user.tag}: ${r}`);
-            return interaction.reply({ embeds: [new EmbedBuilder().setTitle('👢 Membru Kick').setDescription(`**Membru:** ${u.tag}\n**Staff:** ${user}\n**Motiv:** ${r}`).setColor('#ffaa00')] });
-        }
-        if (commandName === 'mute') {
-            const u = options.getUser('user'); const min = options.getInteger('minutes'); const r = options.getString('reason') || 'Fără motiv specificat'; const m = guild.members.cache.get(u.id);
-            if (!m) return interaction.reply({ content: '❌ Nu e pe server!', ephemeral: true });
-            try { await m.timeout(min * 60 * 1000, r); return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🤫 Timeout').setDescription(`**Membru:** ${u.tag}\n**Durată:** ${min} min\n**Staff:** ${user}`).setColor('#333333')] }); } catch(e) { return interaction.reply({ content: '❌ Eroare roluri!', ephemeral: true }); }
-        }
-        if (commandName === 'unmute') {
-            const u = options.getUser('user'); const m = guild.members.cache.get(u.id);
-            if (!m) return interaction.reply({ content: '❌ Nu e pe server!', ephemeral: true });
-            try { await m.timeout(null); return interaction.reply({ content: `🔊 Mutul lui ${u.tag} a fost scos!` }); } catch(e) { return interaction.reply({ content: '❌ Eroare!', ephemeral: true }); }
-        }
-        if (commandName === 'warn') {
-            const u = options.getUser('user'); const r = options.getString('reason') || 'Fără motiv specificat';
-            let d = JSON.parse(fs.readFileSync(WARNS_FILE, 'utf8')); if (!d[u.id]) d[u.id] = [];
-               
