@@ -1,112 +1,144 @@
-const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers
     ]
 });
 
-// ID-ul tău de Staff salvat direct în cod
+// ID-ul tău oficial de Staff salvat în cod:
 const STAFF_ROLE_ID = "1490701828831052027"; 
 
-client.once('ready', () => {
-    console.log(`🤖 ${client.user.tag} este online și rulează de pe GitHub!`);
-});
+// Când botul pornește, înregistrăm comanda cu Slash pe Discord
+client.once('ready', async () => {
+    console.log(`🤖 ${client.user.tag} este online și rulează Slash Commands!`);
 
-client.on('messageCreate', async (message) => {
-    if (message.content === '!setup-ticket' && message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+    // Definim comanda /setup-ticket
+    const commands = [
+        new SlashCommandBuilder()
+            .setName('setup-ticket')
+            .setDescription('Generează panoul premium de tichete VISIUM')
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator) // Doar Adminii o pot vedea/folosi
+            .toJSON()
+    ];
+
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+
+    try {
+        console.log('🔄 Se încarcă comenzile cu slash (/) pe Discord...');
         
-        const ticketEmbed = new EmbedBuilder()
-            .setTitle('VISIUM Support Panel')
-            .setDescription(
-                '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
-                '** 👷Ai nevoie de ajutor? Deschide un ticket de support.**\n' +
-                '** 🏦Pentru cumpărare, apasă Purchase. Fără alte opțiuni.**\n' +
-                '** 🎁Ai de revendicat un reward? Deschide Claim Reward.**\n\n' +
-                '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-            )
-            .setColor('#0099ff');
+        // Înregistrează comanda global (va apărea pe toate serverele unde este botul în maxim câteva secunde)
+        await rest.put(
+            Routes.applicationCommands(client.user.id),
+            { body: commands },
+        );
 
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId('ticket_support')
-                    .setLabel('Support')
-                    .setStyle(ButtonStyle.Primary),
-                new ButtonBuilder()
-                    .setCustomId('ticket_purchase')
-                    .setLabel('Purchase')
-                    .setStyle(ButtonStyle.Success),
-                new ButtonBuilder()
-                    .setCustomId('ticket_claim')
-                    .setLabel('Claim Reward')
-                    .setStyle(ButtonStyle.Secondary)
-            );
-
-        await message.channel.send({ embeds: [ticketEmbed], components: [row] });
-        await message.delete().catch(() => {});
+        console.log('✅ Comenzile cu slash (/) au fost înregistrate cu succes!');
+    } catch (error) {
+        console.error('❌ Eroare la încărcarea comenzilor:', error);
     }
 });
 
+// Sistemul care reacționează când cineva folosește comanda cu SLASH (/)
 client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isButton()) return;
+    // Verificăm dacă interacțiunea este o comandă de tip chat (slash)
+    if (interaction.isChatInputCommand()) {
+        if (interaction.commandName === 'setup-ticket') {
+            // Îi spunem Discordului că procesăm, dar trimitem panoul direct pe canal
+            await interaction.deferReply({ ephemeral: true });
 
-    const { customId, guild, user } = interaction;
-    
-    if (['ticket_support', 'ticket_purchase', 'ticket_claim'].includes(customId)) {
-        await interaction.deferReply({ ephemeral: true });
+            const ticketEmbed = new EmbedBuilder()
+                .setTitle('VISIUM Support Panel')
+                .setDescription(
+                    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
+                    '** 👷Ai nevoie de ajutor? Deschide un ticket de support.**\n' +
+                    '** 🏦Pentru cumpărare, apasă Purchase. Fără alte opțiuni.**\n' +
+                    '** 🎁Ai de revendicat un reward? Deschide Claim Reward.**\n\n' +
+                    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+                )
+                .setColor('#0099ff');
 
-        let typeLabel = 'support';
-        if (customId === 'ticket_purchase') typeLabel = 'purchase';
-        if (customId === 'ticket_claim') typeLabel = 'claim';
+            const row = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('ticket_support')
+                        .setLabel('Support')
+                        .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                        .setCustomId('ticket_purchase')
+                        .setLabel('Purchase')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId('ticket_claim')
+                        .setLabel('Claim Reward')
+                        .setStyle(ButtonStyle.Secondary)
+                );
 
-        const ticketChannel = await guild.channels.create({
-            name: `${typeLabel}-${user.username}`,
-            type: ChannelType.GuildText,
-            permissionOverwrites: [
-                {
-                    id: guild.id,
-                    deny: [PermissionFlagsBits.ViewChannel], // Ascunde de restul lumii
-                },
-                {
-                    id: user.id,
-                    allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory], // Acces user
-                },
-                {
-                    id: STAFF_ROLE_ID,
-                    allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory], // Acces STAFF!
-                }
-            ],
-        });
-
-        const welcomeEmbed = new EmbedBuilder()
-            .setTitle(`🎫 Ticket ${typeLabel.toUpperCase()}`)
-            .setDescription(`Salut ${user}!\n\nUn membru din staff (<@&${STAFF_ROLE_ID}>) va ajunge în cel mai scurt timp pentru a te ajuta.\nPentru a închide acest ticket, apasă pe butonul roșu de mai jos.`)
-            .setColor('#ffcc00');
-
-        const closeRow = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId('close_ticket')
-                    .setLabel('Close Ticket')
-                    .setStyle(ButtonStyle.Danger)
-            );
-
-        // Dă tag userului și rolului de Staff când se deschide camera
-        await ticketChannel.send({ content: `${user} | <@&${STAFF_ROLE_ID}>`, embeds: [welcomeEmbed], components: [closeRow] });
-        await interaction.editReply({ content: `Ticketul tău a fost creat cu succes în ${ticketChannel}!`, ephemeral: true });
+            // Trimitem panoul pe canalul unde s-a scris comanda
+            await interaction.channel.send({ embeds: [ticketEmbed], components: [row] });
+            
+            // Îi confirmăm adminului în secret că panoul s-a pus cu succes
+            await interaction.editReply({ content: '✅ Panoul de tichete a fost generat!' });
+        }
     }
 
-    if (customId === 'close_ticket') {
-        await interaction.reply({ content: 'Acest ticket se va șterge definitiv în 5 secunde...' });
-        setTimeout(async () => {
-            await interaction.channel.delete().catch(() => {});
-        }, 5000);
+    // Sistemul pentru butoanele din tichete (rămâne neschimbat, funcționează perfect)
+    if (interaction.isButton()) {
+        const { customId, guild, user } = interaction;
+        
+        if (['ticket_support', 'ticket_purchase', 'ticket_claim'].includes(customId)) {
+            await interaction.deferReply({ ephemeral: true });
+
+            let typeLabel = 'support';
+            if (customId === 'ticket_purchase') typeLabel = 'purchase';
+            if (customId === 'ticket_claim') typeLabel = 'claim';
+
+            const ticketChannel = await guild.channels.create({
+                name: `${typeLabel}-${user.username}`,
+                type: ChannelType.GuildText,
+                permissionOverwrites: [
+                    {
+                        id: guild.id,
+                        deny: [PermissionFlagsBits.ViewChannel], // Ascunde de @everyone
+                    },
+                    {
+                        id: user.id,
+                        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
+                    },
+                    {
+                        id: STAFF_ROLE_ID,
+                        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
+                    }
+                ],
+            });
+
+            const welcomeEmbed = new EmbedBuilder()
+                .setTitle(`🎫 Ticket ${typeLabel.toUpperCase()}`)
+                .setDescription(`Salut ${user}!\n\nUn membru din staff (<@&${STAFF_ROLE_ID}>) va ajunge în cel mai scurt timp pentru a te ajuta.\nPentru a închide acest ticket, apasă pe butonul roșu de mai jos.`)
+                .setColor('#ffcc00');
+
+            const closeRow = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('close_ticket')
+                        .setLabel('Close Ticket')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+            await ticketChannel.send({ content: `${user} | <@&${STAFF_ROLE_ID}>`, embeds: [welcomeEmbed], components: [closeRow] });
+            await interaction.editReply({ content: `Ticketul tău a fost creat cu succes în ${ticketChannel}!`, ephemeral: true });
+        }
+
+        if (customId === 'close_ticket') {
+            await interaction.reply({ content: 'Acest ticket se va șterge definitiv în 5 secunde...' });
+            setTimeout(async () => {
+                await interaction.channel.delete().catch(() => {});
+            }, 5000);
+        }
     }
 });
 
 client.login(process.env.DISCORD_TOKEN);
-                            
+                                            
