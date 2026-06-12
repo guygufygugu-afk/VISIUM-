@@ -1,3 +1,5 @@
+const http = require('http');
+http.createServer((req, res) => res.end("Botul este online!")).listen(process.env.PORT || 3000);
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, REST, Routes, SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
