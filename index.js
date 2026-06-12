@@ -17,7 +17,9 @@ const client = new Client({
 
 const STAFF_ROLE_ID = "1490701828831052027"; 
 const VOUCH_LOGS_CHANNEL_ID = "1514651853348929738"; 
-const BANNER_URL = "https://i.imgur.com/6Y8W74M.png"; 
+
+// Aici este noul banner personalizat generat cu "VISIUM SCAMMER"
+const BANNER_URL = "https://dummyimage.com/600x150/1a1c1e/ff3333.png&text=%E2%9A%A0%20VISIUM%20SCAMMER%20%E2%9A%A0"; 
 
 const WARNS_FILE = path.join('/tmp', 'warns.json');
 const INVITES_FILE = path.join('/tmp', 'invites.json');
@@ -28,11 +30,10 @@ if (!fs.existsSync(INVITES_FILE)) fs.writeFileSync(INVITES_FILE, JSON.stringify(
 if (!fs.existsSync(VOUCHES_FILE)) fs.writeFileSync(VOUCHES_FILE, JSON.stringify({}));
 const invitesCache = new Map();
 
-// O bază de date temporară în memorie ca să nu mai pierdem textul la split-uri
 const temporaryVouches = new Map();
 
 client.once('ready', async () => {
-    console.log(`💼 ${client.user.tag} este online! Toate erorile de sintaxă au fost rezolvate.`);
+    console.log(`💼 ${client.user.tag} este online! Bannerul personalizat a fost aplicat.`);
     for (const [_, guild] of client.guilds.cache) {
         try { const gi = await guild.invites.fetch(); invitesCache.set(guild.id, new Map(gi.map(i => [i.code, i.uses]))); } catch {}
     }
@@ -45,7 +46,7 @@ client.once('ready', async () => {
         new SlashCommandBuilder().setName('suspect').setDescription('Marchează un utilizator ca suspect de hack').addUserOption(o => o.setName('user').setDescription('Utilizatorul').setRequired(true)).addStringOption(o => o.setName('detalii').setDescription('Detalii/Dovezi').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.MuteMembers),
         new SlashCommandBuilder().setName('mark').setDescription('Marchează un utilizator ca scammer').addUserOption(o => o.setName('user').setDescription('Utilizatorul').setRequired(true)).addStringOption(o => o.setName('motiv').setDescription('Motivul marcării').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.MuteMembers),
         new SlashCommandBuilder().setName('ban').setDescription('Ban').addUserOption(o => o.setName('user').setDescription('Membru').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Motiv')).setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
-        new SlashCommandBuilder().setName('kick').setDescription('Kick').addUserOption(o => o.setName('user').setDescription('Membru').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Motiv').setRequired(false)).setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
+        new SlashCommandBuilder().setName('kick').setDescription('Kick').addUserOption(o => o.setName('user').setDescription('Membru').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Motiv')).setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
         new SlashCommandBuilder().setName('mute').setDescription('Mute').addUserOption(o => o.setName('user').setDescription('Membru').setRequired(true)).addIntegerOption(o => o.setName('minutes').setDescription('Minute').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Motiv')).setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
         new SlashCommandBuilder().setName('unmute').setDescription('Unmute').addUserOption(o => o.setName('user').setDescription('Membru').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
         new SlashCommandBuilder().setName('warn').setDescription('Warn').addUserOption(o => o.setName('user').setDescription('Membru').setRequired(true)).addStringOption(o => o.setName('reason').setDescription('Motiv')).setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
@@ -226,4 +227,4 @@ client.on('interactionCreate', async (i) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-            
+                                                                                                                                
