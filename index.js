@@ -4,6 +4,7 @@ const path = require('path');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildInvites] });
 const STAFF_ROLE_ID = "1490701828831052027"; 
+const SUGESTII_CHANNEL_ID = "1514651853348929738"; // ID-ul canalului tău salvat corect
 const WARNS_FILE = path.join('/tmp', 'warns.json');
 const INVITES_FILE = path.join('/tmp', 'invites.json');
 
@@ -153,11 +154,18 @@ client.on('interactionCreate', async (i) => {
     }
 
     if (i.isModalSubmit() && i.customId === 'md_sug') {
-        const id = i.fields.getTextInputValue('s_id'), aj = i.fields.getTextInputValue('s_aj'), ch = i.guild.channels.cache.find(c => c.name === 'sugestii' && c.type === ChannelType.GuildText);
-        if (!ch) return i.reply({ content: '❌ Canalul `sugestii` nu există!', ephemeral: true }); await i.reply({ content: '✅ Trimis!', ephemeral: true });
-        return ch.send({ embeds: [new EmbedBuilder().setTitle('💡 Sugestie Nouă').setThumbnail(i.user.displayAvatarURL({ dynamic: true })).setColor('#ffff00').addFields({ name: '📝 Sugestia mea:', value: `\`\`\`\n${id}\n\`\`\`` }, { name: '❓ Ajutor:', value: `\`\`\`\n${aj}\n\`\`\`` }, { name: '📊 Status Voturi:', value: '✅ Aprobări: `0` | ❌ Respingeri: `0`' }).setFooter({ text: `Trimis de: ${i.user.tag}` }).setTimestamp()], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('s_da').setLabel('Aprobă (0)').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('s_nu').setLabel('Respinge (0)').setStyle(ButtonStyle.Danger))] });
+        const id = i.fields.getTextInputValue('s_id'), aj = i.fields.getTextInputValue('s_aj');
+        const targetChannel = i.guild.channels.cache.get(SUGESTII_CHANNEL_ID);
+        
+        if (!targetChannel) return i.reply({ content: '❌ Canalul de sugestii configurat nu a fost găsit pe server!', ephemeral: true });
+        await i.reply({ content: '✅ Formular trimis cu succes în canalul dedicat!', ephemeral: true });
+        
+        return targetChannel.send({ 
+            embeds: [new EmbedBuilder().setTitle('💡 Sugestie Nouă').setThumbnail(i.user.displayAvatarURL({ dynamic: true })).setColor('#ffff00').addFields({ name: '📝 Sugestia mea:', value: `\`\`\`\n${id}\n\`\`\`` }, { name: '❓ Ajutor:', value: `\`\`\`\n${aj}\n\`\`\`` }, { name: '📊 Status Voturi:', value: '✅ Aprobări: `0` | ❌ Respingeri: `0`' }).setFooter({ text: `Trimis de: ${i.user.tag}` }).setTimestamp()], 
+            components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('s_da').setLabel('Aprobă (0)').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('s_nu').setLabel('Respinge (0)').setStyle(ButtonStyle.Danger))] 
+        });
     }
 });
 
 client.login(process.env.DISCORD_TOKEN);
-            
+    
