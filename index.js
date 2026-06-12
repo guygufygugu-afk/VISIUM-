@@ -17,8 +17,6 @@ const client = new Client({
 
 const STAFF_ROLE_ID = "1490701828831052027"; 
 const VOUCH_LOGS_CHANNEL_ID = "1514651853348929738"; 
-
-// Pune aici link-ul cu imaginea/bannerul tău (cum e cel cu "Siropel bot" din screenshot)
 const BANNER_URL = "https://i.imgur.com/6Y8W74M.png"; 
 
 const WARNS_FILE = path.join('/tmp', 'warns.json');
@@ -31,7 +29,7 @@ if (!fs.existsSync(VOUCHES_FILE)) fs.writeFileSync(VOUCHES_FILE, JSON.stringify(
 const invitesCache = new Map();
 
 client.once('ready', async () => {
-    console.log(`💼 ${client.user.tag} este online cu noul design pentru marcaje!`);
+    console.log(`💼 ${client.user.tag} este online cu erorile reparate!`);
     for (const [_, guild] of client.guilds.cache) {
         try { const gi = await guild.invites.fetch(); invitesCache.set(guild.id, new Map(gi.map(i => [i.code, i.uses]))); } catch {}
     }
@@ -116,31 +114,25 @@ client.on('interactionCreate', async (i) => {
             return i.reply({ content: '❌ **Acces Refuzat!**', ephemeral: true });
         }
 
-        // DESIGN IDENTIC CU SCREENSHOT-UL TĂU PENTRU /MARK
         if (cmd === 'mark') {
             const u = opts.getUser('user');
             const motiv = opts.getString('motiv');
-
             const markEmb = new EmbedBuilder()
                 .setTitle("Scammer Marcat")
                 .setDescription(`🚨 **Utilizator marcat scammer**\n\n🕵️‍♂️ *Utilizator:* ${u}\n❯ *Motiv:* *${motiv}*`)
-                .setColor("#ff3333") // Culoarea liniei roșii de pe margine
-                .setImage(BANNER_URL); // Bannerul de jos
-
+                .setColor("#ff3333")
+                .setImage(BANNER_URL);
             return i.reply({ embeds: [markEmb] });
         }
 
-        // DESIGN IDENTIC PENTRU /SUSPECT 
         if (cmd === 'suspect') {
             const u = opts.getUser('user');
             const detalii = opts.getString('detalii');
-
             const suspEmb = new EmbedBuilder()
                 .setTitle("Suspect de Hack")
                 .setDescription(`⚠️ **Utilizator marcat suspect**\n\n🕵️‍♂️ *Utilizator:* ${u}\n❯ *Detalii / Dovezi:* *${detalii}*`)
                 .setColor("#ffaa00") 
                 .setImage(BANNER_URL);
-
             return i.reply({ embeds: [suspEmb] });
         }
 
@@ -159,8 +151,6 @@ client.on('interactionCreate', async (i) => {
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('tk_support').setLabel('Support').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('tk_purchase').setLabel('Purchase').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('tk_claim').setLabel('Claim Reward').setStyle(ButtonStyle.Secondary));
             await i.channel.send({ embeds: [emb], components: [row] }); return i.editReply({ content: '✅ Panou generat!' });
         }
-        // Restul comenzilor administrative ramase intacte...
-        if (cmd === 'ban') { /* ... */ }
     }
 
     if (i.isButton()) {
@@ -171,11 +161,19 @@ client.on('interactionCreate', async (i) => {
             if (cid.startsWith('v_deny_')) { await msg.delete().catch(() => {}); return i.reply({ content: "❌ Respins.", ephemeral: true }); }
             
             const parts = cid.split('_'); const targetId = parts[2]; const authorId = parts[3];
-            const comentariuText = msg.embeds[0].description.split('**Comentariu:**\n```\n')[1].split('\n
-```')[0];
+            
+            // LINIA REPARATĂ CONFORM SCREENSHOT-ULUI (Am scos caracterele invalide):
+            const descriere = msg.embeds[0].description || "";
+            let comentariuText = "Fără comentariu";
+            if (descriere.includes("Comentariu:\n```\n")) {
+                comentariuText = descriere.split("Comentariu:\n
+```\n")[1].split("\n```")[0];
+            }
+
             let vData = JSON.parse(fs.readFileSync(VOUCHES_FILE, 'utf-8')); if (!vData[targetId]) vData[targetId] = { count: 0, list: [] };
             vData[targetId].count++; vData[targetId].list.push({ from: authorId, text: comentariuText });
             fs.writeFileSync(VOUCHES_FILE, JSON.stringify(vData, null, 2));
+            
             await msg.edit({ embeds: [EmbedBuilder.from(msg.embeds[0]).setTitle("✅ Vouch Aprobat").setColor("#00ff00").addFields({ name: "Statut:", value: `Acceptat de: ${user}` })], components: [] });
             return i.reply({ content: "✅ Vouch aprobat!", ephemeral: true });
         }
@@ -190,4 +188,4 @@ client.on('interactionCreate', async (i) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-        
+            
