@@ -24,7 +24,7 @@ if (!fs.existsSync(INVITES_FILE)) fs.writeFileSync(INVITES_FILE, JSON.stringify(
 const invitesCache = new Map();
 
 client.once('ready', async () => {
-    console.log(`🤖 ${client.user.tag} este online cu Panouri Premium (Tickets & Sugestii Formulare)!`);
+    console.log(`🤖 ${client.user.tag} este online cu Panouri Premium, Invites și Sistem Complet de Warns!`);
 
     for (const [guildId, guild] of client.guilds.cache) {
         try {
@@ -80,6 +80,17 @@ client.once('ready', async () => {
             .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 
         new SlashCommandBuilder()
+            .setName('unwarn')
+            .setDescription('Scoate un avertisment sau toate avertismentele unui membru')
+            .addUserOption(option => option.setName('user').setDescription('Membrul căruia îi scoți warn-ul').setRequired(true))
+            .addStringOption(option => option.setName('select').setDescription('Alege ce ștergi').setRequired(true)
+                .addChoices(
+                    { name: 'Șterge ultimul warn primit', value: 'last' },
+                    { name: 'Șterge ABSOLUT TOATE warn-urile', value: 'all' }
+                ))
+            .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+
+        new SlashCommandBuilder()
             .setName('warns')
             .setDescription('Verifică câte avertismente are un membru')
             .addUserOption(option => option.setName('user').setDescription('Membrul').setRequired(true))
@@ -103,9 +114,9 @@ client.once('ready', async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
     try {
-        console.log('🔄 Încărcăm comenzile cu slash în API...');
+        console.log('🔄 Actualizăm toate comenzile în API...');
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log('✅ Sistemele de panouri sunt gata!');
+        console.log('✅ Toate sistemele (inclusiv unwarn) sunt active!');
     } catch (error) {
         console.error(error);
     }
@@ -139,14 +150,41 @@ client.on('guildMemberAdd', async (member) => {
 
 client.on('interactionCreate', async (interaction) => {
     
-    // --- PARTEA DE COMENZI SLASH ---
     if (interaction.isChatInputCommand()) {
         const { commandName, options, guild, user } = interaction;
 
-        // Comanda Setup Panou Sugestii
+        // --- SISTEMUL DE UNWARN (SCOATERE WARN) ---
+        if (commandName === 'unwarn') {
+            const targetUser = options.getUser('user');
+            const actionType = options.getString('select');
+            let data = JSON.parse(fs.readFileSync(WARNS_FILE, 'utf8'));
+
+            if (!data[targetUser.id] || data[targetUser.id].length === 0) {
+                return interaction.reply({ content: `ℹ️ ${targetUser.tag} nu are niciun avertisment activ în baza de date.`, ephemeral: true });
+            }
+
+            if (actionType === 'all') {
+                // Ștergem complet istoricul lui
+                delete data[targetUser.id];
+                fs.writeFileSync(WARNS_FILE, JSON.stringify(data, null, 2));
+                return interaction.reply({ content: `✅ Toate avertismentele lui ${targetUser} au fost șterse cu succes de către ${user}!` });
+            } 
+            
+            if (actionType === 'last') {
+                // Scoatem doar ultimul warn adăugat în array (.pop())
+                const removedWarn = data[targetUser.id].pop();
+                
+                // Dacă nu mai are alte warn-uri după eliminare, curățăm cheia din JSON
+                if (data[targetUser.id].length === 0) delete data[targetUser.id];
+                
+                fs.writeFileSync(WARNS_FILE, JSON.stringify(data, null, 2));
+                return interaction.reply({ content: `✅ Ultimul avertisment primit de ${targetUser} (Motiv vechi: \`${removedWarn.reason}\`) a fost scos de către ${user}!\n📉 Warn-uri rămase: \`${data[targetUser.id] ? data[targetUser.id].length : 0}\`` });
+            }
+        }
+
+        // --- PANOU SUGESTII ---
         if (commandName === 'setup-sugestii') {
             await interaction.deferReply({ ephemeral: true });
-
             const embedSugestii = new EmbedBuilder()
                 .setTitle('💡 Trimite o Sugestie')
                 .setDescription('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n**💭 Ai o idee pentru server? Trimite sugestia ta apăsând pe butonul de mai jos.**\n\n**🎭 Cum funcționează?**\n* 📝 Apeși butonul și completezi formularul.\n* 📊 Se va genera automat un mesaj pentru votul comunității.\n* 👷 Staff-ul o va analiza și va decide statusul ei.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
@@ -154,17 +192,13 @@ client.on('interactionCreate', async (interaction) => {
                 .setFooter({ text: 'Ajută-ne să facem comunitatea mai bună!' });
 
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('deschide_formular_sugestie')
-                    .setLabel('📝 Trimite Sugestie')
-                    .setStyle(ButtonStyle.Primary)
+                new ButtonBuilder().setCustomId('deschide_formular_sugestie').setLabel('📝 Trimite Sugestie').setStyle(ButtonStyle.Primary)
             );
-
             await interaction.channel.send({ embeds: [embedSugestii], components: [row] });
-            return interaction.editReply({ content: '✅ Panoul fix pentru sugestii a fost generat!' });
+            return interaction.editReply({ content: '✅ Panou sugestii generat!' });
         }
 
-        // Setup Panou Ticket
+        // --- PANOU TICKETS ---
         if (commandName === 'setup-ticket') {
             await interaction.deferReply({ ephemeral: true });
             const ticketEmbed = new EmbedBuilder()
@@ -180,7 +214,7 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply({ content: '✅ Panou generat!' });
         }
 
-        // Moderare & Invites (Rămân active din codurile trecute)
+        // --- RESTUL COMENZILOR DE MODERARE ȘI INVITES ---
         if (commandName === 'ban') {
             const u = options.getUser('user'); const r = options.getString('reason') || 'Fără motiv specificat'; const m = guild.members.cache.get(u.id);
             if (!m || !m.bannable) return interaction.reply({ content: '❌ Imposibil de executat!', ephemeral: true });
@@ -211,7 +245,7 @@ client.on('interactionCreate', async (interaction) => {
         }
         if (commandName === 'warns') {
             const u = options.getUser('user'); let d = JSON.parse(fs.readFileSync(WARNS_FILE, 'utf8'));
-            if (!d[u.id] || d[u.id].length === 0) return interaction.reply({ content: `ℹ️ Fără avertismente.` });
+            if (!d[u.id] || d[u.id].length === 0) return interaction.reply({ content: `ℹ️ ${u.tag} nu are niciun avertisment.` });
             let l = d[u.id].map((w, i) => `**${i + 1}.** Staff: \`${w.staff}\` | Motiv: \`${w.reason}\` (${w.date})`).join('\n');
             return interaction.reply({ embeds: [new EmbedBuilder().setTitle(`📋 Warn-uri: ${u.tag}`).setDescription(l).setColor('#ffff00')] });
         }
@@ -229,69 +263,35 @@ client.on('interactionCreate', async (interaction) => {
         if (commandName === 'invites-reset') { fs.writeFileSync(INVITES_FILE, JSON.stringify({})); return interaction.reply({ content: '✅ Resetat!' }); }
     }
 
-    // --- PARTEA DE INTERACȚIUNI BUTOANE ---
+    // --- INTERACȚIUNI BUTOANE ȘI MODALS (SUGESTII & TICKETS) ---
     if (interaction.isButton()) {
         const { customId, guild, user, message } = interaction;
 
-        // Când cineva apasă butonul din Panou, îi trimitem Formularul (Modal)
         if (customId === 'deschide_formular_sugestie') {
-            const modal = new ModalBuilder()
-                .setCustomId('modal_sugestie')
-                .setTitle('Trimite o sugestie');
-
-            const intrebi1 = new TextInputBuilder()
-                .setCustomId('sugestie_continut')
-                .setLabel('Ce sugestie ai?')
-                .setStyle(TextInputStyle.Paragraph)
-                .setPlaceholder('Descrie ideea ta aici...')
-                .setRequired(true);
-
-            const intrebi2 = new TextInputBuilder()
-                .setCustomId('sugestie_ajutor')
-                .setLabel('Cu ce va ajuta serverul sugestia?')
-                .setStyle(TextInputStyle.Paragraph)
-                .setPlaceholder('Cum îmbunătățește asta experiența membrilor?')
-                .setRequired(true);
-
-            const primulRand = new ActionRowBuilder().addComponents(intrebi1);
-            const alDoileaRand = new ActionRowBuilder().addComponents(intrebi2);
-
-            modal.addComponents(primulRand, alDoileaRand);
+            const modal = new ModalBuilder().setCustomId('modal_sugestie').setTitle('Trimite o sugestie');
+            const intrebi1 = new TextInputBuilder().setCustomId('sugestie_continut').setLabel('Ce sugestie ai?').setStyle(TextInputStyle.Paragraph).setPlaceholder('Descrie ideea ta aici...').setRequired(true);
+            const intrebi2 = new TextInputBuilder().setCustomId('sugestie_ajutor').setLabel('Cu ce va ajuta serverul sugestia?').setStyle(TextInputStyle.Paragraph).setPlaceholder('Cum îmbunătățește experiența membrilor?').setRequired(true);
+            modal.addComponents(new ActionRowBuilder().addComponents(intrebi1), new ActionRowBuilder().addComponents(intrebi2));
             return await interaction.showModal(modal);
         }
 
-        // Sistem de Voturi pentru butoanele de sub sugestia generată
         if (customId === 'sugestie_da' || customId === 'sugestie_nu') {
             await interaction.deferUpdate();
-            
-            const oldEmbed = message.embeds[0];
-            const oldComponents = message.components[0].components;
-            
-            let voturiDa = parseInt(oldComponents[0].label.match(/\d+/)[0]);
-            let voturiNu = parseInt(oldComponents[1].label.match(/\d+/)[0]);
-
+            const oldEmbed = message.embeds[0]; const oldComponents = message.components[0].components;
+            let voturiDa = parseInt(oldComponents[0].label.match(/\d+/)[0]); let voturiNu = parseInt(oldComponents[1].label.match(/\d+/)[0]);
             if (customId === 'sugestie_da') voturiDa++;
             if (customId === 'sugestie_nu') voturiNu++;
-
             const noulEmbed = EmbedBuilder.from(oldEmbed).setFields(
                 { name: oldEmbed.fields[0].name, value: oldEmbed.fields[0].value, inline: false },
                 { name: oldEmbed.fields[1].name, value: oldEmbed.fields[1].value, inline: false },
                 { name: '📊 Status Voturi:', value: `✅ Aprobări: \`${voturiDa}\` | ❌ Respingeri: \`${voturiNu}\``, inline: false }
             );
-
-            const randNou = new ActionRowBuilder().addComponents(
-                ButtonBuilder.from(oldComponents[0]).setLabel(`Aprobă (${voturiDa})`),
-                ButtonBuilder.from(oldComponents[1]).setLabel(`Respinge (${voturiNu})`)
-            );
-
-            return message.edit({ embeds: [noulEmbed], components: [randNou] });
+            return message.edit({ embeds: [noulEmbed], components: [new ActionRowBuilder().addComponents(ButtonBuilder.from(oldComponents[0]).setLabel(`Aprobă (${voturiDa})`), ButtonBuilder.from(oldComponents[1]).setLabel(`Respinge (${voturiNu})`))] });
         }
 
-        // Logica de Tichete
         if (['ticket_support', 'ticket_purchase', 'ticket_claim'].includes(customId)) {
             await interaction.deferReply({ ephemeral: true });
             let typeLabel = customId === 'ticket_purchase' ? 'purchase' : (customId === 'ticket_claim' ? 'claim' : 'support');
-
             const ticketChannel = await guild.channels.create({
                 name: `${typeLabel}-${user.username}`,
                 type: ChannelType.GuildText,
@@ -301,10 +301,8 @@ client.on('interactionCreate', async (interaction) => {
                     { id: STAFF_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }
                 ],
             });
-
             const welcomeEmbed = new EmbedBuilder().setTitle(`🎫 Ticket ${typeLabel.toUpperCase()}`).setDescription(`Salut ${user}!\n\nUn membru din staff (<@&${STAFF_ROLE_ID}>) va ajunge în cel mai scurt timp.`).setColor('#ffcc00');
-            const closeRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger));
-            await ticketChannel.send({ content: `${user} | <@&${STAFF_ROLE_ID}>`, embeds: [welcomeEmbed], components: [closeRow] });
+            await ticketChannel.send({ content: `${user} | <@&${STAFF_ROLE_ID}>`, embeds: [welcomeEmbed], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger))] });
             await interaction.editReply({ content: `Creată în ${ticketChannel}!`, ephemeral: true });
         }
 
@@ -314,31 +312,6 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-    // --- PARTEA CÂND MEMBRUL TRIMITE FORMULARUL COMPLETAT (MODAL SUBMIT) ---
     if (interaction.isModalSubmit()) {
         if (interaction.customId === 'modal_sugestie') {
-            const idee = interaction.fields.getTextInputValue('sugestie_continut');
-            const beneficiu = interaction.fields.getTextInputValue('sugestie_ajutor');
-
-            // Căutăm canalul numit "sugestii" pe server unde trimitem votul
-            const sugestiiChannel = interaction.guild.channels.cache.find(c => c.name === 'sugestii' && c.type === ChannelType.GuildText);
-            
-            if (!sugestiiChannel) {
-                return interaction.reply({ content: '❌ Eroare: Nu am găsit niciun canal text numit exact `sugestii`. Creează-l mai întâi ca să am unde posta!', ephemeral: true });
-            }
-
-            await interaction.reply({ content: '✅ Formularul a fost trimis! Mulțumim pentru implicare.', ephemeral: true });
-
-            const embedVot = new EmbedBuilder()
-                .setTitle('💡 Sugestie Nouă')
-                .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
-                .setColor('#ffff00')
-                .addFields(
-                    { name: '📝 Sugestia meaa:', value: `\`\`\`\n${idee}\n\`\`\``, inline: false },
-                    { name: '❓ Cu ce va ajuta serverul:', value: `\`\`\`\n${beneficiu}\n\`\`\``, inline: false },
-                    { name: '📊 Status Voturi:', value: '✅ Aprobări: `0` | ❌ Respingeri: `0`', inline: false }
-                )
-                .setFooter({ text: `Trimisă de: ${interaction.user.tag}` })
-                .setTimestamp();
-
-            const rowVoturi = new ActionRowBuilder().addComponents(
+            const
