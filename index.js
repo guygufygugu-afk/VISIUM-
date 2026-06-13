@@ -1,26 +1,38 @@
-// Adaugă 'suspect' la comenzile Slash
+// Server HTTP pentru a păstra botul activ
+const http = require('http');
+http.createServer((req, res) => res.end("Bot activ!")).listen(process.env.PORT || 3000);
+
+// Importurile corecte pentru Discord.js v14
+const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
+
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+
+// Definirea comenzilor
 const commands = [
-    new SlashCommandBuilder().setName('ping').setDescription('Verifica botul'),
     new SlashCommandBuilder()
-        .setName('suspect')
-        .setDescription('Marcheaza un utilizator ca suspect de hack')
-        .addUserOption(o => o.setName('user').setDescription('Userul suspect').setRequired(true))
-        .addStringOption(o => o.setName('motiv').setDescription('Motivul').setRequired(true))
-].map(cmd => cmd.toJSON());
+        .setName('ping')
+        .setDescription('Verifica daca botul este activ')
+].map(command => command.toJSON());
 
-// Adaugă logica pentru interacțiunea 'suspect'
-client.on('interactionCreate', async i => {
-    if (!i.isChatInputCommand()) return;
-
-    if (i.commandName === 'ping') await i.reply('Pong!');
-
-    if (i.commandName === 'suspect') {
-        const u = i.options.getUser('user');
-        const motiv = i.options.getString('motiv');
-        const embed = new EmbedBuilder()
-            .setTitle('⚠️ Utilizator Suspect')
-            .setDescription(`Utilizator: ${u}\nMotiv: ${motiv}`)
-            .setColor('#ffff00');
-        await i.reply({ embeds: [embed] });
+client.once('ready', async () => {
+    console.log('✅ Botul este ONLINE!');
+    
+    // Înregistrarea comenzilor la Discord
+    try {
+        const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+        await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+        console.log('✅ Comenzile au fost sincronizate!');
+    } catch (error) {
+        console.error('Eroare la sincronizarea comenzilor:', error);
     }
 });
+
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isChatInputCommand()) return;
+
+    if (interaction.commandName === 'ping') {
+        await interaction.reply('Pong! Botul funcționează.');
+    }
+});
+
+client.login(process.env.DISCORD_TOKEN);
