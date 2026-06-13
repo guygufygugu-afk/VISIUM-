@@ -1,7 +1,7 @@
 const http = require('http');
 http.createServer((req, res) => res.end("Bot activ!")).listen(process.env.PORT || 3000);
 
-const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, PermissionFlagsBits } = require('discord.js');
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 const commands = [
@@ -13,9 +13,14 @@ const commands = [
         .addStringOption(o => o.setName('motiv').setDescription('Motiv').setRequired(true)),
     new SlashCommandBuilder()
         .setName('suspect')
-        .setDescription('Marcheaza un utilizator ca suspect de hack')
+        .setDescription('Marcheaza un utilizator ca suspect')
         .addUserOption(o => o.setName('user').setDescription('User suspect').setRequired(true))
         .addStringOption(o => o.setName('motiv').setDescription('Motiv').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('clear')
+        .setDescription('Sterge mesaje')
+        .addIntegerOption(o => o.setName('amount').setDescription('Numar de mesaje').setRequired(true))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
     new SlashCommandBuilder().setName('suggestionpanel').setDescription('Trimite panoul de sugestii')
 ].map(c => c.toJSON());
 
@@ -39,6 +44,12 @@ client.on('interactionCreate', async i => {
             const u = i.options.getUser('user');
             const motiv = i.options.getString('motiv');
             await i.reply({ embeds: [new EmbedBuilder().setTitle("⚠️ Utilizator Suspect").setDescription(`**User:** ${u}\n**Motiv:** ${motiv}`).setColor("#ffff00")] });
+        }
+
+        if (i.commandName === 'clear') {
+            const amount = i.options.getInteger('amount');
+            await i.channel.bulkDelete(amount, true);
+            await i.reply({ content: `✅ Am șters ${amount} mesaje!`, ephemeral: true });
         }
 
         if (i.commandName === 'suggestionpanel') {
