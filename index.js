@@ -1,7 +1,7 @@
 const http = require('http');
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-// 1. Server HTTP (obligatoriu pentru Render)
+// Server HTTP obligatoriu pentru Render
 http.createServer((req, res) => res.end("Bot activ!")).listen(process.env.PORT || 10000);
 
 const client = new Client({ 
@@ -10,7 +10,7 @@ const client = new Client({
 
 client.once('ready', () => console.log('✅ VISIUM Bot este ONLINE!'));
 
-// 2. Sistem Prefix (+p, +vouch)
+// 1. Comenzi Prefix (+p, +vouch)
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.content.startsWith('+')) return;
     const args = message.content.split(' ');
@@ -32,13 +32,17 @@ client.on('messageCreate', async (message) => {
     if (args[0] === '+vouch') return message.reply("🟢 Vouch-ul a fost primit!");
 });
 
-// 3. Slash Commands și Tichete
+// 2. Slash Commands și Tichete
 client.on('interactionCreate', async (i) => {
     if (i.isButton()) {
         if (i.customId.startsWith('ticket_')) {
             const type = i.customId.split('_')[1];
-            const channel = await i.guild.channels.create({ name: `${type}-${i.user.username}` });
-            await i.reply({ content: `✅ Tichet de tip **${type}** creat: ${channel}`, ephemeral: true });
+            // Creare canal privat
+            const channel = await i.guild.channels.create({ 
+                name: `${type}-${i.user.username}`,
+                permissionOverwrites: [{ id: i.guild.id, deny: ['ViewChannel'] }, { id: i.user.id, allow: ['ViewChannel'] }]
+            });
+            await i.reply({ content: `✅ Tichet creat: ${channel}`, ephemeral: true });
         }
     } else if (i.isChatInputCommand()) {
         await i.deferReply({ ephemeral: true });
@@ -67,3 +71,4 @@ client.on('interactionCreate', async (i) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
+               
