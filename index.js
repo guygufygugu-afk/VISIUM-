@@ -7,10 +7,10 @@ const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] 
 });
 
-// Stocare bani (TEMPORAR - se șterge la restart)
 let economie = {};
+const VOUCH_CHANNEL_ID = '1514651853348929738';
 
-client.once('ready', () => console.log('✅ VISIUM Bot ONLINE!'));
+client.once('ready', () => console.log('✅ VISIUM Bot ONLINE (Versiune Completă)'));
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.content.startsWith('+')) return;
@@ -18,45 +18,46 @@ client.on('messageCreate', async (message) => {
     const id = message.author.id;
     if (!economie[id]) economie[id] = 0;
 
-    // --- COMMEZI ECONOMIE ---
-    if (message.content.startsWith('+bal')) {
-        message.reply(`💰 Ai **${economie[id]}** monede.`);
-    }
-
-    if (message.content.startsWith('+daily')) {
-        economie[id] += 100;
-        message.reply("🎁 Ai primit 100 monede daily!");
-    }
-
-    if (message.content.startsWith('+give')) {
+    // --- Economie ---
+    if (message.content.startsWith('+bal')) return message.reply(`💰 Ai **${economie[id]}** monede.`);
+    if (message.content.startsWith('+daily')) { economie[id] += 100; return message.reply("🎁 Ai primit 100 monede!"); }
+    
+    // --- Vouch-uri ---
+    if (message.content.startsWith('+vouch')) {
         const target = message.mentions.users.first();
-        const suma = parseInt(args[2]);
-        if (!target || !suma || suma > economie[id]) return message.reply("❌ Sumă invalidă sau fonduri insuficiente!");
-        economie[id] -= suma;
-        if (!economie[target.id]) economie[target.id] = 0;
-        economie[target.id] += suma;
-        message.reply(`✅ Ai trimis ${suma} monede către ${target.username}.`);
-    }
-
-    if (message.content.startsWith('+coinflip')) {
-        const suma = parseInt(args[1]);
-        if (!suma || suma > economie[id]) return message.reply("❌ Introdu o sumă validă.");
-        const castig = Math.random() > 0.5;
-        if (castig) {
-            economie[id] += suma;
-            message.reply(`🪙 Ai dat cu banul și ai CÂȘTIGAT ${suma}! Balanța: ${economie[id]}`);
-        } else {
-            economie[id] -= suma;
-            message.reply(`🪙 Ai dat cu banul și ai PIERDUT ${suma}. Balanța: ${economie[id]}`);
+        if (!target) return message.reply("❌ Menționează un user.");
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('v_accept').setLabel('Accept').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('v_decline').setLabel('Respins').setStyle(ButtonStyle.Danger)
+        );
+        const channel = message.guild.channels.cache.get(VOUCH_CHANNEL_ID);
+        if (channel) {
+            await channel.send({ embeds: [new EmbedBuilder().setTitle("🔔 Vouch Nou").setDescription(`Autor: ${message.author}\nDestinatar: ${target}`).setColor("#FFD700")], components: [row] });
+            return message.reply("✅ Vouch trimis!");
         }
     }
+});
 
-    // --- COMENZI SUPORT/MODERARE (cele vechi) ---
-    if (message.content.startsWith('+p')) {
-        const user = message.mentions.users.first() || message.author;
-        message.reply({ embeds: [new EmbedBuilder().setTitle(`👤 ${user.username}`).setDescription(`ID: ${user.id}`).setColor("#2F3136")] });
+client.on('interactionCreate', async (i) => {
+    // --- Panou Suport / Tichete ---
+    if (i.isChatInputCommand() && i.commandName === 'supportpanel') {
+        await i.deferReply({ ephemeral: false });
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('ticket_support').setLabel('Support').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('ticket_purchase').setLabel('Purchase').setStyle(ButtonStyle.Success)
+        );
+        return i.editReply({ content: "👷 VISIUM Support Panel", components: [row] });
+    }
+
+    if (i.isButton()) {
+        await i.deferReply({ ephemeral: true });
+        if (i.customId === 'v_accept') return i.editReply("✅ Vouch acceptat!");
+        if (i.customId === 'v_decline') return i.editReply("❌ Vouch respins!");
+        if (i.customId === 'ticket_support' || i.customId === 'ticket_purchase') {
+            const channel = await i.guild.channels.create({ name: `tichet-${i.user.username}`, type: ChannelType.GuildText });
+            return i.editReply(`✅ Tichet creat: ${channel}`);
+        }
     }
 });
 
 client.login(process.env.DISCORD_TOKEN);
-    
