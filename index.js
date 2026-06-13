@@ -3,10 +3,13 @@ const http = require('http');
 
 http.createServer((req, res) => res.end("Bot activ!")).listen(process.env.PORT || 10000);
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
+const client = new Client({ 
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] 
+});
 
 const VOUCH_CHANNEL_ID = '1514651853348929738';
-const lastProcessedMessages = new Set(); // Previne mesajele duble
+const processedMessages = new Set();
+const economie = new Map();
 
 client.once('ready', async () => {
     console.log(`✅ ${client.user.tag} este ONLINE!`);
@@ -15,58 +18,68 @@ client.once('ready', async () => {
         { name: 'ban', description: 'Ban user', options: [{name:'user', type:6, description:'User', required:true}, {name:'reason', type:3, description:'Motiv', required:false}] },
         { name: 'kick', description: 'Kick user', options: [{name:'user', type:6, description:'User', required:true}, {name:'reason', type:3, description:'Motiv', required:false}] },
         { name: 'warn', description: 'Warn user', options: [{name:'user', type:6, description:'User', required:true}, {name:'reason', type:3, description:'Motiv', required:false}] },
-        { name: 'clearwarns', description: 'Clear warns', options: [{name:'user', type:6, description:'User', required:true}] },
-        { name: 'supportpanel', description: 'Postează panoul de suport' }
+        { name: 'unwarn', description: 'Unwarn user', options: [{name:'user', type:6, description:'User', required:true}] },
+        { name: 'mute', description: 'Mute user', options: [{name:'user', type:6, description:'User', required:true}, {name:'time', type:4, description:'Minute', required:true}] },
+        { name: 'unmute', description: 'Unmute user', options: [{name:'user', type:6, description:'User', required:true}] },
+        { name: 'supportpanel', description: 'Postează panoul' }
     ];
     
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    try {
-        await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    } catch (e) { console.error(e); }
+    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
 });
 
 client.on('messageCreate', async (message) => {
-    // Evită procesarea dublă
-    if (lastProcessedMessages.has(message.id)) return;
-    lastProcessedMessages.add(message.id);
-    setTimeout(() => lastProcessedMessages.delete(message.id), 2000);
+    if (processedMessages.has(message.id)) return;
+    processedMessages.add(message.id);
+    setTimeout(() => processedMessages.delete(message.id), 3000);
 
     if (message.author.bot || !message.content.startsWith('+')) return;
     const args = message.content.split(' ');
+    const id = message.author.id;
+    if (!economie.has(id)) economie.set(id, 0);
 
-    if (message.content.startsWith('+p')) {
-        const user = message.mentions.users.first() || message.author;
-        return message.reply({ embeds: [new EmbedBuilder().setTitle(`👤 Profil: ${user.username}`).setDescription("📊 Vouch-uri Totale Aprobate: 0").setColor("#2F3136")] });
-    }
-
+    if (message.content.startsWith('+bal')) return message.reply(`💰 Balanța: **${economie.get(id)}** monede.`);
+    if (message.content.startsWith('+daily')) { economie.set(id, economie.get(id) + 100); return message.reply("🎁 Ai primit 100 monede!"); }
     if (message.content.startsWith('+vouch')) {
         const target = message.mentions.users.first();
         const comentariu = args.slice(2).join(' ');
-        if (!target || !comentariu) return message.reply("❌ Format incorect! Folosește: +vouch @user <comentariu>");
+        if (!target || target.id === message.author.id || !comentariu) return message.reply("❌ Eroare: Nu poți da vouch singur sau format greșit.");
         const channel = message.guild.channels.cache.get(VOUCH_CHANNEL_ID);
         if (channel) {
             await channel.send(`🔔 **Vouch de la ${message.author.username} pentru ${target.username}**: ${comentariu}`);
-            return message.reply("✅ Vouch-ul tău a fost trimis spre verificare!");
+            return message.reply("✅ Vouch trimis!");
         }
+    }
+    if (message.content.startsWith('+p')) {
+        const user = message.mentions.users.first() || message.author;
+        return message.reply({ embeds: [new EmbedBuilder().setTitle(`👤 Profil: ${user.username}`).setDescription(`💰 Bani: ${economie.get(user.id) || 0}`).setColor("#2F3136")] });
     }
 });
 
 client.on('interactionCreate', async (i) => {
     if (i.isChatInputCommand()) {
         await i.deferReply({ ephemeral: false });
+        const member = i.options.getMember('user');
+        
         if (i.commandName === 'supportpanel') {
-            const embed = new EmbedBuilder().setTitle("VISIUM Support Panel").setDescription("👷 Ai nevoie de ajutor? Deschide un tichet.\n🏦 Pentru cumpărare, apasă Purchase.\n🎁 Ai de revendicat un reward? Deschide Claim.").setColor("#2F3136");
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('ticket_support').setLabel('Support').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('ticket_purchase').setLabel('Purchase').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('ticket_claim').setLabel('Claim Reward').setStyle(ButtonStyle.Secondary)
+                new ButtonBuilder().setCustomId('ticket_purchase').setLabel('Purchase').setStyle(ButtonStyle.Success)
             );
-            return i.editReply({ embeds: [embed], components: [row] });
+            return i.editReply({ content: "👷 Alege o opțiune:", components: [row] });
         }
-        if (i.commandName === 'warn') return i.editReply(`⚠️ ${i.options.getMember('user')} a primit un avertisment!`);
-        if (i.commandName === 'clearwarns') return i.editReply(`🧹 Avertismente șterse pentru ${i.options.getMember('user')}!`);
-        if (i.commandName === 'ban') return i.editReply(`✅ ${i.options.getMember('user')} a fost banat.`);
-        if (i.commandName === 'kick') return i.editReply(`✅ ${i.options.getMember('user')} a fost dat afară.`);
+        if (i.commandName === 'ban') return i.editReply(`✅ ${member.user.tag} a fost banat.`);
+        if (i.commandName === 'kick') return i.editReply(`✅ ${member.user.tag} a fost dat afară.`);
+        if (i.commandName === 'warn') return i.editReply(`⚠️ ${member.user.tag} a fost avertizat.`);
+        if (i.commandName === 'unwarn') return i.editReply(`🧹 Avertismente șterse pentru ${member.user.tag}.`);
+        if (i.commandName === 'mute') {
+            await member.timeout(i.options.getInteger('time') * 60000, "Muted by staff");
+            return i.editReply(`⏱️ ${member.user.tag} a primit mute.`);
+        }
+        if (i.commandName === 'unmute') {
+            await member.timeout(null, "Unmuted by staff");
+            return i.editReply(`✅ ${member.user.tag} a primit unmute.`);
+        }
     }
 
     if (i.isButton()) {
@@ -79,4 +92,4 @@ client.on('interactionCreate', async (i) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-        
+            
