@@ -1,60 +1,57 @@
-const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 const fs = require('fs');
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
+// --- ÎNCĂRCARE BAZĂ DE DATE ---
+const db = JSON.parse(fs.readFileSync('./data.json', 'utf8')); // Asigură-te că ai acest fișier
 
-// --- Bază de date simplă ---
-const DB_FILE = './data.json';
-function loadDB() { return JSON.parse(fs.existsSync(DB_FILE) ? fs.readFileSync(DB_FILE) : '{}'); }
-function saveDB(data) { fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2)); }
+client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
 
-client.on('messageCreate', async (message) => {
-    if (message.author.bot) return;
+    try {
+        // --- SISTEM MARK (SCAMMER/HACKER) ---
+        if (interaction.commandName === 'mark') {
+            const user = interaction.options.getUser('user');
+            const tip = interaction.options.getString('tip');
+            const motiv = interaction.options.getString('motiv');
+            const embed = new EmbedBuilder()
+                .setTitle(`${tip.toUpperCase()} MARCAT`)
+                .setColor(0xFF0000)
+                .setDescription(`🚨 Utilizator marcat: ${tip}`)
+                .addFields({ name: '👤 Utilizator', value: `<@${user.id}>` }, { name: '≫ Motiv', value: motiv });
+            await interaction.reply({ embeds: [embed] });
+        }
 
-    // --- Sistem Profil (+p) ---
-    if (message.content.startsWith("+p")) {
-        const target = message.mentions.users.first() || message.author;
-        const db = loadDB();
-        const userData = db[target.id] || { total: 0, reviews: [] };
-        
-        const embed = new EmbedBuilder()
-            .setTitle(`👤 Profil Vouch-uri: ${target.username}`)
-            .addFields(
-                { name: '📊 Vouch-uri Totale Aprobate:', value: `⭐ ${userData.total} vouch-uri` },
-                { name: '💬 Recenzii:', value: userData.reviews.length ? userData.reviews.slice(-3).map(r => `• ${r.text}`).join('\n') : "Nicio recenzie." }
-            );
-        message.reply({ embeds: [embed] });
-    }
+        // --- SISTEM WARNS ---
+        if (interaction.commandName === 'warn') {
+            const user = interaction.options.getUser('user');
+            // Logica: Adaugă în JSON, apoi:
+            await interaction.reply(`⚠️ Utilizatorul ${user.tag} a primit un avertisment.`);
+        }
 
-    // --- Sistem Vouch (+vouch) ---
-    if (message.content.startsWith("+vouch")) {
-        const args = message.content.split(' ').slice(1);
-        const target = message.mentions.users.first();
-        if (!target || !args[1]) return message.reply("❌ Format: +vouch @user <comentariu>");
-        if (target.id === message.author.id) return message.reply("❌ Nu îți poți da vouch singur!");
-        
-        message.reply(`✅ Vouch-ul tău pentru ${target.username} a fost trimis spre verificare!`);
+        if (interaction.commandName === 'warns') {
+            const user = interaction.options.getUser('user');
+            await interaction.reply(`📊 ${user.username} are X avertismente.`);
+        }
+
+        // --- SISTEM PROFIL (+p) ---
+        if (interaction.commandName === 'p') {
+            const user = interaction.options.getUser('user') || interaction.user;
+            const embed = new EmbedBuilder()
+                .setTitle(`👤 Profil: ${user.username}`)
+                .addFields({ name: '⭐ Vouch-uri', value: '0' });
+            await interaction.reply({ embeds: [embed] });
+        }
+
+        // --- SISTEM OWO ---
+        if (interaction.commandName === 'owo') {
+            await interaction.reply("🐾 Ai vânat și ai găsit 50 monede!");
+        }
+
+    } catch (error) {
+        console.error(error);
+        await interaction.reply({ content: 'A apărut o eroare!', ephemeral: true });
     }
 });
 
-// --- Interacțiuni (Butoane / Modaluri / Slash) ---
-client.on('interactionCreate', async (i) => {
-    if (i.isChatInputCommand()) {
-        // Exemplu de comandă `/lock`
-        if (i.commandName === 'lock') {
-            await i.reply("🔒 Canal blocat!");
-        }
-        // Adaugă aici restul comenzilor slash
-    }
-
-    if (i.isButton()) {
-        if (i.customId === 'btn_sugestie') {
-            const modal = new ModalBuilder().setCustomId('modal_sugestie').setTitle('Trimite o sugestie');
-            const input = new TextInputBuilder().setCustomId('sug_text').setLabel('Sugestia ta').setStyle(TextInputStyle.Paragraph);
-            modal.addComponents(new ActionRowBuilder().addComponents(input));
-            await i.showModal(modal);
-        }
-    }
-});
-
-client.login('TOKEN-UL-TAU');
+client.login('TOKEN_AICI');
