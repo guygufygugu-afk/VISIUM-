@@ -1,18 +1,16 @@
 const http = require('http');
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-// Server HTTP necesar pentru Render
+// 1. Server pentru Render (Fix port scan timeout)
 http.createServer((req, res) => res.end("Bot activ!")).listen(process.env.PORT || 10000);
 
 const client = new Client({ 
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] 
 });
 
-client.once('ready', () => {
-    console.log('✅ VISIUM Bot este ONLINE!');
-});
+client.once('ready', () => console.log('✅ VISIUM Bot este ONLINE!'));
 
-// Comenzi Prefix (+p, +vouch)
+// 2. Comenzi Prefix (+p, +vouch)
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.content.startsWith('+')) return;
     const args = message.content.split(' ');
@@ -31,13 +29,10 @@ client.on('messageCreate', async (message) => {
             .setFooter({ text: "VISIUM bot" });
         return message.reply({ embeds: [embed] });
     }
-
-    if (args[0] === '+vouch') {
-        return message.reply("🟢 Vouch-ul a fost primit!");
-    }
+    if (args[0] === '+vouch') return message.reply("🟢 Vouch-ul a fost primit!");
 });
 
-// Slash Commands (Moderare + Tichete)
+// 3. Slash Commands și Moderare (Execuție REALĂ)
 client.on('interactionCreate', async (i) => {
     if (i.isButton()) {
         if (i.customId.startsWith('ticket_')) {
@@ -48,8 +43,9 @@ client.on('interactionCreate', async (i) => {
         await i.deferReply({ ephemeral: true });
         const member = i.options.getMember('user');
         
-        if (i.commandName === 'ban') { await member.ban(); await i.editReply('✅ Ban aplicat.'); }
-        else if (i.commandName === 'kick') { await member.kick(); await i.editReply('✅ Kick aplicat.'); }
+        // Aici se execută acțiunile reale
+        if (i.commandName === 'ban') { await member.ban(); await i.editReply('✅ Utilizator banat.'); }
+        else if (i.commandName === 'kick') { await member.kick(); await i.editReply('✅ Utilizator dat afară.'); }
         else if (i.commandName === 'timeout') { 
             await member.timeout(i.options.getInteger('minute') * 60 * 1000); 
             await i.editReply('✅ Timeout aplicat.'); 
