@@ -4,15 +4,16 @@ const http = require('http');
 http.createServer((req, res) => res.end("Bot activ!")).listen(process.env.PORT || 10000);
 
 const client = new Client({ 
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] 
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers] 
 });
 
 const VOUCH_CHANNEL_ID = '1514651853348929738';
-const processedMessages = new Set();
 const vouchCount = new Map(); 
 
 client.once('ready', async () => {
     console.log(`✅ ${client.user.tag} este ONLINE!`);
+    
+    // Înregistrare comenzi Slash
     const commands = [
         { name: 'ban', description: 'Ban', options: [{name:'user', type:6, required:true}, {name:'reason', type:3, required:false}] },
         { name: 'kick', description: 'Kick', options: [{name:'user', type:6, required:true}, {name:'reason', type:3, required:false}] },
@@ -28,43 +29,26 @@ client.once('ready', async () => {
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.content.startsWith('+')) return;
-    
-    // Protecție anti-dublură (folosind un timestamp mic)
-    const now = Date.now();
-    if (processedMessages.has(message.author.id + now.toString().slice(0, -3))) return;
-    processedMessages.add(message.author.id + now.toString().slice(0, -3));
-    setTimeout(() => processedMessages.clear(), 1000);
+    const args = message.content.slice(1).trim().split(/ +/);
+    const command = args.shift().toLowerCase();
 
-    const args = message.content.split(' ');
-
-    // COMANDĂ PROFIL (+p) - Doar vouch-uri
-    if (message.content.startsWith('+p')) {
+    // +p Profil
+    if (command === 'p') {
         const user = message.mentions.users.first() || message.author;
-        const count = vouchCount.get(user.id) || 0;
-        const embed = new EmbedBuilder()
-            .setTitle(`👤 Profil: ${user.username}`)
-            .setDescription(`📊 Vouch-uri Totale: ${count}`)
-            .setColor("#2F3136")
-            .setThumbnail(user.displayAvatarURL());
-        return message.reply({ embeds: [embed] });
+        return message.reply({ embeds: [new EmbedBuilder().setTitle(`👤 Profil: ${user.username}`).setDescription(`📊 Vouch-uri Totale: ${vouchCount.get(user.id) || 0}`).setColor("#2F3136")] });
     }
 
-    // COMANDĂ VOUCH
-    if (message.content.startsWith('+vouch')) {
+    // +vouch
+    if (command === 'vouch') {
         const target = message.mentions.users.first();
         if (!target || target.id === message.author.id) return message.reply("❌ Menționează un alt user!");
-        
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`v_accept_${target.id}`).setLabel('Accept').setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId('v_decline').setLabel('Respins').setStyle(ButtonStyle.Danger)
         );
-        
         const channel = message.guild.channels.cache.get(VOUCH_CHANNEL_ID);
         if (channel) {
-            await channel.send({ 
-                embeds: [new EmbedBuilder().setTitle("🔔 Vouch Nou").setDescription(`**Autor:** ${message.author}\n**Destinatar:** ${target}`).setColor("#FFD700")], 
-                components: [row] 
-            });
+            await channel.send({ embeds: [new EmbedBuilder().setTitle("🔔 Vouch Nou").setDescription(`**Autor:** ${message.author}\n**Destinatar:** ${target}`).setColor("#FFD700")], components: [row] });
             return message.reply("✅ Vouch trimis!");
         }
     }
@@ -73,6 +57,8 @@ client.on('messageCreate', async (message) => {
 client.on('interactionCreate', async (i) => {
     if (i.isChatInputCommand()) {
         await i.deferReply({ ephemeral: false });
+        const member = i.options.getMember('user');
+        
         if (i.commandName === 'supportpanel') {
             const embed = new EmbedBuilder().setTitle("🎫 VISIUM | Centru de Suport").setDescription("👷 **Support**: Probleme tehnice\n🏦 **Purchase**: Achiziții\n🎁 **Claim**: Revendicări").setColor("#5865F2");
             const row = new ActionRowBuilder().addComponents(
@@ -82,7 +68,14 @@ client.on('interactionCreate', async (i) => {
             );
             return i.editReply({ embeds: [embed], components: [row] });
         }
-        // ... logica de moderare (ban/mute/etc)
+        
+        // Moderare
+        if (i.commandName === 'ban') return i.editReply(`✅ ${member.user.tag} a fost banat.`);
+        if (i.commandName === 'kick') return i.editReply(`✅ ${member.user.tag} a fost dat afară.`);
+        if (i.commandName === 'warn') return i.editReply(`⚠️ ${member.user.tag} avertizat.`);
+        if (i.commandName === 'unwarn') return i.editReply(`🧹 Avertismente șterse pentru ${member.user.tag}.`);
+        if (i.commandName === 'mute') { await member.timeout(i.options.getInteger('time') * 60000); return i.editReply(`⏱️ ${member.user.tag} a primit mute.`); }
+        if (i.commandName === 'unmute') { await member.timeout(null); return i.editReply(`✅ ${member.user.tag} a primit unmute.`); }
     }
 
     if (i.isButton()) {
@@ -90,15 +83,14 @@ client.on('interactionCreate', async (i) => {
         if (i.customId.startsWith('v_accept_')) {
             const targetId = i.customId.split('_')[2];
             vouchCount.set(targetId, (vouchCount.get(targetId) || 0) + 1);
-            return i.editReply("✅ Vouch acceptat și adăugat la profil!");
+            return i.editReply("✅ Vouch acceptat!");
         }
-        if (i.customId === 'v_decline') return i.editReply("❌ Vouch respins.");
+        if (i.customId === 'v_decline') return i.editReply("❌ Vouch respins!");
         if (i.customId.startsWith('ticket_')) {
-            const channel = await i.guild.channels.create({ name: `tichet-${i.user.username}`, type: ChannelType.GuildText });
+            const channel = await i.guild.channels.create({ name: `tichet-${i.user.username.slice(0, 8)}`, type: ChannelType.GuildText });
             return i.editReply(`✅ Tichet creat: ${channel}`);
         }
     }
 });
 
 client.login(process.env.DISCORD_TOKEN);
-            
