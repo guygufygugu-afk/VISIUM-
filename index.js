@@ -7,79 +7,288 @@ http.createServer((req, res) => {
 }).listen(port, () => {
   console.log(`Serverul HTTP a pornit pe portul ${port}`);
 });
-const http = require('http');
-http.createServer((req, res) => res.end("VISIUM Vouch & Staff Bot is Online!")).listen(process.env.PORT || 3000);
+const {
+    Client,
+    GatewayIntentBits,
+    PermissionsBitField,
+    SlashCommandBuilder,
+    REST,
+    Routes,
+    EmbedBuilder
+} = require('discord.js');
 
-const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
-const { QuickDB } = require("quick.db");
-const db = new QuickDB();
 const fs = require('fs');
-const path = require('path');
 
-const client = new Client({ 
+const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+
+const client = new Client({
     intents: [
-        GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, 
-        GatewayIntentBits.GuildInvites, GatewayIntentBits.MessageContent
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
     ]
 });
 
-const STAFF_ROLE_ID = "1490701828831052027"; 
-const VOUCH_LOGS_CHANNEL_ID = "1514651853348929738"; 
-const BANNER_URL = "https://dummyimage.com/600x150/1a1c1e/ff3333.png&text=%E2%9A%A0%20VISIUM%20SCAMMER%20%E2%9A%A0"; 
-const VOUCHES_FILE = path.join('/tmp', 'vouches.json');
-if (!fs.existsSync(VOUCHES_FILE)) fs.writeFileSync(VOUCHES_FILE, JSON.stringify({}));
+// ===== JSON DATABASE =====
 
-client.once('ready', async () => {
-    console.log(`💼 ${client.user.tag} este online!`);
-    const commands = [
-        new SlashCommandBuilder().setName('setup-ticket').setDescription('Panou tichete'),
-        new SlashCommandBuilder().setName('invites').setDescription('Vezi invitații').addUserOption(o => o.setName('user').setDescription('Membru')),
-        new SlashCommandBuilder().setName('balanta').setDescription('Bani economie'),
-        new SlashCommandBuilder().setName('work').setDescription('Lucrează pentru bani'),
-        new SlashCommandBuilder().setName('mark').setDescription('Scammer').addUserOption(o => o.setName('user').setRequired(true)).addStringOption(o => o.setName('motiv').setRequired(true)),
-        new SlashCommandBuilder().setName('clear').setDescription('Șterge mesaje').addIntegerOption(o => o.setName('numar').setRequired(true)),
-        new SlashCommandBuilder().setName('ban').setDescription('Ban').addUserOption(o => o.setName('user').setRequired(true))
-    ].map(cmd => cmd.toJSON());
+if (!fs.existsSync('./economy.json')) {
+    fs.writeFileSync('./economy.json', '{}');
+}
 
-    await new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN).put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log('✅ Comenzi sincronizate!');
+if (!fs.existsSync('./scammers.json')) {
+    fs.writeFileSync('./scammers.json', '{}');
+}
+
+function loadEconomy() {
+    return JSON.parse(fs.readFileSync('./economy.json'));
+}
+
+function saveEconomy(data) {
+    fs.writeFileSync('./economy.json', JSON.stringify(data, null, 2));
+}
+
+function loadScammers() {
+    return JSON.parse(fs.readFileSync('./scammers.json'));
+}
+
+function saveScammers(data) {
+    fs.writeFileSync('./scammers.json', JSON.stringify(data, null, 2));
+}
+
+// ===== SLASH COMMANDS =====
+
+const commands = [
+
+new SlashCommandBuilder()
+.setName('ban')
+.setDescription('Ban a user')
+.addUserOption(option =>
+option.setName('user')
+.setDescription('User')
+.setRequired(true)
+),
+
+new SlashCommandBuilder()
+.setName('balance')
+.setDescription('View balance'),
+
+new SlashCommandBuilder()
+.setName('daily')
+.setDescription('Claim daily reward'),
+
+new SlashCommandBuilder()
+.setName('work')
+.setDescription('Work for coins'),
+
+new SlashCommandBuilder()
+.setName('markscammer')
+.setDescription('Mark a user as scammer')
+.addUserOption(option =>
+option.setName('user')
+.setDescription('User')
+.setRequired(true)
+)
+
+].map(cmd => cmd.toJSON());
+
+// ===== REGISTER =====
+
+const rest = new REST({ version: '10' }).setToken(TOKEN);
+
+(async () => {
+    try {
+        await rest.put(
+            Routes.applicationCommands(CLIENT_ID),
+            { body: commands }
+        );
+
+        console.log('Commands loaded.');
+    } catch (err) {
+        console.error(err);
+    }
+})();
+
+// ===== READY =====
+
+client.once('ready', () => {
+    console.log(`${client.user.tag} online`);
 });
 
-client.on('interactionCreate', async (i) => {
-    if (!i.isChatInputCommand()) return;
-    const { commandName, options, user, guild, channel } = i;
+// ===== INTERACTIONS =====
 
-    // Comenzi Noi
-    if (commandName === 'invites') {
-        const target = options.getUser('user') || user;
-        const gInvites = await guild.invites.fetch();
-        const count = gInvites.filter(inv => inv.inviter.id === target.id).reduce((p, v) => v.uses + p, 0);
-        return i.reply({ content: `👤 **${target.username}** are **${count}** invitații.`, ephemeral: true });
+client.on('interactionCreate', async interaction => {
+
+    if (!interaction.isChatInputCommand()) return;
+
+    // BAN
+
+    if (interaction.commandName === 'ban') {
+
+        if (!interaction.member.permissions.has(
+            PermissionsBitField.Flags.BanMembers
+        )) {
+            return interaction.reply({
+                content: 'No permission.',
+                ephemeral: true
+            });
+        }
+
+        const user =
+        interaction.options.getUser('user');
+
+        const member =
+        interaction.guild.members.cache.get(user.id);
+
+        if (!member) {
+            return interaction.reply({
+                content: 'User not found.'
+            });
+        }
+
+        await member.ban();
+
+        return interaction.reply({
+            content: `${user.tag} banned.`
+        });
     }
 
-    if (commandName === 'balanta') {
-        const bal = await db.get(`money_${user.id}`) || 0;
-        return i.reply(`💰 Ai **${bal}** monede.`);
+    // BALANCE
+
+    if (interaction.commandName === 'balance') {
+
+        const data = loadEconomy();
+
+        if (!data[interaction.user.id]) {
+            data[interaction.user.id] = {
+                coins: 0
+            };
+            saveEconomy(data);
+        }
+
+        return interaction.reply({
+            content:
+            `💰 Balance: ${data[interaction.user.id].coins}`
+        });
     }
 
-    if (commandName === 'work') {
-        const castig = Math.floor(Math.random() * 100) + 10;
-        await db.add(`money_${user.id}`, castig);
-        return i.reply(`👷 Ai lucrat și ai câștigat **${castig}** monede!`);
+    // DAILY
+
+    if (interaction.commandName === 'daily') {
+
+        const data = loadEconomy();
+
+        if (!data[interaction.user.id]) {
+            data[interaction.user.id] = {
+                coins: 0
+            };
+        }
+
+        data[interaction.user.id].coins += 500;
+
+        saveEconomy(data);
+
+        return interaction.reply({
+            content:
+            'You received 500 coins.'
+        });
     }
 
-    // Comenzi Vechi (Staff)
-    if (commandName === 'mark') {
-        const u = options.getUser('user');
-        const motiv = options.getString('motiv');
-        return i.reply({ embeds: [new EmbedBuilder().setTitle("Scammer Marcat").setDescription(`🚨 ${u}\nMotiv: ${motiv}`).setColor("#ff3333").setImage(BANNER_URL)] });
+    // WORK
+
+    if (interaction.commandName === 'work') {
+
+        const data = loadEconomy();
+
+        if (!data[interaction.user.id]) {
+            data[interaction.user.id] = {
+                coins: 0
+            };
+        }
+
+        const earned =
+        Math.floor(Math.random() * 300) + 50;
+
+        data[interaction.user.id].coins += earned;
+
+        saveEconomy(data);
+
+        return interaction.reply({
+            content:
+            `You earned ${earned} coins.`
+        });
     }
-    
-    if (commandName === 'clear') {
-        await channel.bulkDelete(options.getInteger('numar'), true);
-        return i.reply({ content: `🧹 Am șters mesajele!`, ephemeral: true });
+
+    // MARK SCAMMER
+
+    if (interaction.commandName === 'markscammer') {
+
+        if (!interaction.member.permissions.has(
+            PermissionsBitField.Flags.Administrator
+        )) {
+            return interaction.reply({
+                content: 'No permission.',
+                ephemeral: true
+            });
+        }
+
+        const target =
+        interaction.options.getUser('user');
+
+        const scammers =
+        loadScammers();
+
+        scammers[target.id] = true;
+
+        saveScammers(scammers);
+
+        const embed =
+        new EmbedBuilder()
+        .setTitle('⚠️ Scammer Marked')
+        .setDescription(
+            `${target.tag} has been marked as scammer`
+        )
+        .setColor('Red');
+
+        return interaction.reply({
+            embeds: [embed]
+        });
+    }
+
+});
+
+client.on('messageCreate', message => {
+
+    if (message.author.bot) return;
+
+    const scammers = loadScammers();
+
+    if (scammers[message.author.id]) {
+
+        message.reply(
+            '⚠️ This user is marked as scammer.'
+        );
+    }
+
+    if (
+        message.content.includes('http://') ||
+        message.content.includes('https://')
+    ) {
+
+        if (
+            !message.member.permissions.has(
+                PermissionsBitField.Flags.ManageMessages
+            )
+        ) {
+
+            message.delete().catch(() => {});
+
+            message.channel.send(
+                `${message.author}, links are not allowed.`
+            );
+        }
     }
 });
 
-client.login(process.env.DISCORD_TOKEN);
-        
+client.login(TOKEN);
