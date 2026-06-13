@@ -1,4 +1,13 @@
 const http = require('http');
+const port = process.env.PORT || 3000;
+
+http.createServer((req, res) => {
+  res.write("Botul este online!");
+  res.end();
+}).listen(port, () => {
+  console.log(`Serverul HTTP a pornit pe portul ${port}`);
+});
+const http = require('http');
 http.createServer((req, res) => res.end("VISIUM Vouch & Staff Bot is Online!")).listen(process.env.PORT || 3000);
 
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
