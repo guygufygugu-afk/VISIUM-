@@ -1,27 +1,33 @@
 const http = require('http');
-// Render injectează portul în procesul.env.PORT
-const port = process.env.PORT || 10000; 
+const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+
+// 1. DEFINIREA CLIENTULUI (Aici se definește 'client')
+const client = new Client({ 
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] 
+});
+
+// 2. CONFIGURĂRI
+const STAFF_ROLE_ID = '1490701828831052027';
+const VOUCH_CHANNEL_ID = '1514651853348929738';
+
+// 3. SERVER HTTP PENTRU RENDER (Fix pentru "Port scan timeout")
 http.createServer((req, res) => {
-  res.writeHead(200);
-  res.end('Bot is running!');
-}).listen(port, () => {
-  console.log(`Server HTTP pornit pe portul ${port}`);
-});
+    res.end("Bot activ!");
+}).listen(process.env.PORT || 10000);
+
+// 4. EVENIMENTE (Aici codul are voie să folosească 'client')
 client.on('messageCreate', async (message) => {
-    // 1. Ignoră mesajele boților și mesajele care nu încep cu "+"
     if (message.author.bot || !message.content.startsWith('+')) return;
-
-    // 2. Prevenție: procesează doar dacă mesajul este exact comanda
-    const args = message.content.trim().split(/ +/);
-    const commandName = args[0].toLowerCase();
-
-    // Folosim if-uri simple pentru a evita duplicarea
-    if (commandName === '+p') {
-        return message.reply(`Profilul lui ${args[1] || message.author.username} este gata! (Sistem Vouch activ)`);
-    }
     
-    if (commandName === '+vouch') {
-        // ... logica ta de vouch
+    // Logica ta pentru vouch, +p, etc.
+    if (message.content.startsWith('+vouch')) {
+        // ... (restul logicii de vouch)
     }
-    // ... restul comenzilor
 });
+
+client.on('interactionCreate', async (interaction) => {
+    // ... (logica de slash commands și butoane)
+});
+
+// 5. LOGIN (ULTIMA LINIE)
+client.login(process.env.DISCORD_TOKEN);
