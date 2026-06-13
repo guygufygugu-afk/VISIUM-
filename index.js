@@ -1,3 +1,6 @@
+process.on("uncaughtException", err => {
+  console.log("ERROR:", err);
+});
 const {
   Client,
   GatewayIntentBits,
