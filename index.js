@@ -1,7 +1,7 @@
 const http = require('http');
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-// 1. Server pentru Render (Fix port scan timeout)
+// 1. Server HTTP (obligatoriu pentru Render)
 http.createServer((req, res) => res.end("Bot activ!")).listen(process.env.PORT || 10000);
 
 const client = new Client({ 
@@ -10,7 +10,7 @@ const client = new Client({
 
 client.once('ready', () => console.log('✅ VISIUM Bot este ONLINE!'));
 
-// 2. Comenzi Prefix (+p, +vouch)
+// 2. Sistem Prefix (+p, +vouch)
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.content.startsWith('+')) return;
     const args = message.content.split(' ');
@@ -32,18 +32,18 @@ client.on('messageCreate', async (message) => {
     if (args[0] === '+vouch') return message.reply("🟢 Vouch-ul a fost primit!");
 });
 
-// 3. Slash Commands și Moderare (Execuție REALĂ)
+// 3. Slash Commands și Tichete
 client.on('interactionCreate', async (i) => {
     if (i.isButton()) {
         if (i.customId.startsWith('ticket_')) {
-            const channel = await i.guild.channels.create({ name: `${i.customId.split('_')[1]}-${i.user.username}` });
-            await i.reply({ content: `✅ Tichet creat: ${channel}`, ephemeral: true });
+            const type = i.customId.split('_')[1];
+            const channel = await i.guild.channels.create({ name: `${type}-${i.user.username}` });
+            await i.reply({ content: `✅ Tichet de tip **${type}** creat: ${channel}`, ephemeral: true });
         }
     } else if (i.isChatInputCommand()) {
         await i.deferReply({ ephemeral: true });
         const member = i.options.getMember('user');
         
-        // Aici se execută acțiunile reale
         if (i.commandName === 'ban') { await member.ban(); await i.editReply('✅ Utilizator banat.'); }
         else if (i.commandName === 'kick') { await member.kick(); await i.editReply('✅ Utilizator dat afară.'); }
         else if (i.commandName === 'timeout') { 
@@ -51,11 +51,17 @@ client.on('interactionCreate', async (i) => {
             await i.editReply('✅ Timeout aplicat.'); 
         }
         else if (i.commandName === 'supportpanel') {
+            const embed = new EmbedBuilder()
+                .setTitle("VISIUM Support Panel")
+                .setDescription("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n👷 **Ai nevoie de ajutor? Deschide un ticket de support.**\n🏦 **Pentru cumpărare, apasă Purchase. Fără alte opțiuni.**\n🎁 **Ai de revendicat un reward? Deschide Claim Reward.**\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                .setColor("#2F3136");
+            
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('ticket_support').setLabel('Support').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('ticket_purchase').setLabel('Purchase').setStyle(ButtonStyle.Success)
+                new ButtonBuilder().setCustomId('ticket_purchase').setLabel('Purchase').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('ticket_claim').setLabel('Claim Reward').setStyle(ButtonStyle.Secondary)
             );
-            await i.editReply({ content: "VISIUM Support Panel\n-------------------\nAi nevoie de ajutor? Deschide un tichet.", components: [row] });
+            await i.editReply({ embeds: [embed], components: [row] });
         }
     }
 });
