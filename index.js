@@ -6,9 +6,9 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 const commands = [
     new SlashCommandBuilder().setName('ping').setDescription('Verifica botul'),
-    new SlashCommandBuilder().setName('mark').setDescription('Marcheaza un scammer').addUserOption(o=>o.setName('user').setDescription('Utilizatorul').setRequired(true)).addStringOption(o=>o.setName('motiv').setDescription('Motivul').setRequired(true)),
-    new SlashCommandBuilder().setName('suspect').setDescription('Marcheaza un suspect').addUserOption(o=>o.setName('user').setDescription('Utilizatorul').setRequired(true)).addStringOption(o=>o.setName('motiv').setDescription('Motivul').setRequired(true)),
-    new SlashCommandBuilder().setName('clear').setDescription('Sterge mesaje').addIntegerOption(o=>o.setName('n').setDescription('Numarul').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
+    new SlashCommandBuilder().setName('mark').setDescription('Scammer').addUserOption(o=>o.setName('user').setDescription('User').setRequired(true)).addStringOption(o=>o.setName('motiv').setDescription('Motiv').setRequired(true)),
+    new SlashCommandBuilder().setName('suspect').setDescription('Hack').addUserOption(o=>o.setName('user').setDescription('User').setRequired(true)).addStringOption(o=>o.setName('motiv').setDescription('Motiv').setRequired(true)),
+    new SlashCommandBuilder().setName('clear').setDescription('Sterge mesaje').addIntegerOption(o=>o.setName('n').setDescription('Nr mesaje').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
     new SlashCommandBuilder().setName('ban').setDescription('Ban').addUserOption(o=>o.setName('user').setDescription('User').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
     new SlashCommandBuilder().setName('kick').setDescription('Kick').addUserOption(o=>o.setName('user').setDescription('User').setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
     new SlashCommandBuilder().setName('suggestionpanel').setDescription('Panou sugestii'),
@@ -24,28 +24,36 @@ client.once('ready', async () => {
 client.on('interactionCreate', async i => {
     if (i.isChatInputCommand()) {
         if (i.commandName === 'ping') await i.reply('Pong!');
-        if (i.commandName === 'mark') await i.reply({ embeds: [new EmbedBuilder().setTitle("🚨 Scammer").setDescription(`**User:** ${i.options.getUser('user')}\n**Motiv:** ${i.options.getString('motiv')}`).setColor("#ff3333")] });
-        if (i.commandName === 'suspect') await i.reply({ embeds: [new EmbedBuilder().setTitle("⚠️ Suspect Hack").setDescription(`**User:** ${i.options.getUser('user')}\n**Motiv:** ${i.options.getString('motiv')}`).setColor("#ffff00")] });
+        if (i.commandName === 'mark') await i.reply({ embeds: [new EmbedBuilder().setTitle("🚨 Scammer Marcat").setDescription(`**User:** ${i.options.getUser('user')}\n**Motiv:** ${i.options.getString('motiv')}`).setColor("#ff3333")] });
+        if (i.commandName === 'suspect') await i.reply({ embeds: [new EmbedBuilder().setTitle("⚠️ Utilizator Suspect").setDescription(`**User:** ${i.options.getUser('user')}\n**Motiv:** ${i.options.getString('motiv')}`).setColor("#ffff00")] });
         if (i.commandName === 'clear') { await i.channel.bulkDelete(i.options.getInteger('n'), true); await i.reply({ content: 'Șters!', ephemeral: true }); }
         if (i.commandName === 'ban') { await i.guild.members.ban(i.options.getUser('user')); await i.reply('User banat.'); }
         if (i.commandName === 'kick') { await i.guild.members.kick(i.options.getUser('user')); await i.reply('User kick-uit.'); }
         
         if (i.commandName === 'suggestionpanel') {
-            const modal = new ModalBuilder().setCustomId('sugModal').setTitle('Sugestie');
+            const modal = new ModalBuilder().setCustomId('sugModal').setTitle('Trimite o sugestie');
             modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('s').setLabel('Scrie aici').setStyle(TextInputStyle.Paragraph)));
             await i.showModal(modal);
         }
         
         if (i.commandName === 'supportpanel') {
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ticket').setLabel('Deschide Tichet').setStyle(ButtonStyle.Primary));
-            await i.reply({ content: 'Apasa butonul de mai jos pentru suport:', components: [row] });
+            await i.reply({ content: 'Apasă butonul de mai jos pentru suport:', components: [row] });
         }
     } else if (i.isButton() && i.customId === 'ticket') {
-        await i.reply({ content: 'Tichet creat (funcție în dezvoltare)!', ephemeral: true });
+        const channel = await i.guild.channels.create({
+            name: `tichet-${i.user.username}`,
+            type: 0,
+            permissionOverwrites: [
+                { id: i.guild.id, deny: ['ViewChannel'] },
+                { id: i.user.id, allow: ['ViewChannel', 'SendMessages'] }
+            ]
+        });
+        await i.reply({ content: `✅ Tichet creat: ${channel}`, ephemeral: true });
     } else if (i.isModalSubmit() && i.customId === 'sugModal') {
-        await i.reply({ content: 'Sugestie trimisă cu succes!', ephemeral: true });
+        await i.reply({ content: '✅ Sugestie trimisă!', ephemeral: true });
     }
 });
 
 client.login(process.env.DISCORD_TOKEN);
-                
+                           
