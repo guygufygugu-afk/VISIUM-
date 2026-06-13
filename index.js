@@ -5,7 +5,8 @@ http.createServer((req, res) => res.end("Bot activ!")).listen(process.env.PORT |
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 
-const VOUCH_CHANNEL_ID = '1514651853348929738'; 
+const VOUCH_CHANNEL_ID = '1514651853348929738';
+const lastProcessedMessages = new Set(); // Previne mesajele duble
 
 client.once('ready', async () => {
     console.log(`✅ ${client.user.tag} este ONLINE!`);
@@ -21,11 +22,15 @@ client.once('ready', async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log('✅ Comenzile au fost încărcate!');
-    } catch (e) { console.error('Eroare la comenzi:', e); }
+    } catch (e) { console.error(e); }
 });
 
 client.on('messageCreate', async (message) => {
+    // Evită procesarea dublă
+    if (lastProcessedMessages.has(message.id)) return;
+    lastProcessedMessages.add(message.id);
+    setTimeout(() => lastProcessedMessages.delete(message.id), 2000);
+
     if (message.author.bot || !message.content.startsWith('+')) return;
     const args = message.content.split(' ');
 
@@ -59,7 +64,7 @@ client.on('interactionCreate', async (i) => {
             return i.editReply({ embeds: [embed], components: [row] });
         }
         if (i.commandName === 'warn') return i.editReply(`⚠️ ${i.options.getMember('user')} a primit un avertisment!`);
-        if (i.commandName === 'clearwarns') return i.editReply(`🧹 Toate avertismentele lui ${i.options.getMember('user')} au fost șterse!`);
+        if (i.commandName === 'clearwarns') return i.editReply(`🧹 Avertismente șterse pentru ${i.options.getMember('user')}!`);
         if (i.commandName === 'ban') return i.editReply(`✅ ${i.options.getMember('user')} a fost banat.`);
         if (i.commandName === 'kick') return i.editReply(`✅ ${i.options.getMember('user')} a fost dat afară.`);
     }
