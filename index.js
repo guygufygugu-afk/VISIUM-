@@ -1,20 +1,23 @@
 const http = require('http');
 http.createServer((req, res) => res.end("Bot activ!")).listen(process.env.PORT || 3000);
 
-const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ModalSubmitInteraction } = require('discord.js');
+const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 const commands = [
-    new SlashCommandBuilder().setName('ping').setDescription('Verifica daca botul este activ'),
+    new SlashCommandBuilder().setName('ping').setDescription('Verifica botul'),
     new SlashCommandBuilder()
         .setName('mark')
-        .setDescription('Marcheaza un utilizator ca scammer')
-        .addUserOption(o => o.setName('user').setDescription('Userul de marcat').setRequired(true))
-        .addStringOption(o => o.setName('motiv').setDescription('Motivul pentru scam').setRequired(true)),
+        .setDescription('Marcheaza un scammer')
+        .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
+        .addStringOption(o => o.setName('motiv').setDescription('Motiv').setRequired(true)),
     new SlashCommandBuilder()
-        .setName('suggestionpanel')
-        .setDescription('Trimite panoul pentru sugestii')
-].map(command => command.toJSON());
+        .setName('suspect')
+        .setDescription('Marcheaza un utilizator ca suspect de hack')
+        .addUserOption(o => o.setName('user').setDescription('User suspect').setRequired(true))
+        .addStringOption(o => o.setName('motiv').setDescription('Motiv').setRequired(true)),
+    new SlashCommandBuilder().setName('suggestionpanel').setDescription('Trimite panoul de sugestii')
+].map(c => c.toJSON());
 
 client.once('ready', async () => {
     console.log('✅ Botul este ONLINE!');
@@ -22,26 +25,29 @@ client.once('ready', async () => {
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
 });
 
-client.on('interactionCreate', async interaction => {
-    if (interaction.isChatInputCommand()) {
-        if (interaction.commandName === 'ping') await interaction.reply('Pong!');
+client.on('interactionCreate', async i => {
+    if (i.isChatInputCommand()) {
+        if (i.commandName === 'ping') await i.reply('Pong!');
         
-        if (interaction.commandName === 'mark') {
-            const u = interaction.options.getUser('user');
-            const motiv = interaction.options.getString('motiv');
-            await interaction.reply({ embeds: [new EmbedBuilder().setTitle("🚨 Scammer Marcat").setDescription(`**User:** ${u}\n**Motiv:** ${motiv}`).setColor("#ff3333")] });
+        if (i.commandName === 'mark') {
+            const u = i.options.getUser('user');
+            const motiv = i.options.getString('motiv');
+            await i.reply({ embeds: [new EmbedBuilder().setTitle("🚨 Scammer Marcat").setDescription(`**User:** ${u}\n**Motiv:** ${motiv}`).setColor("#ff3333")] });
         }
 
-        if (interaction.commandName === 'suggestionpanel') {
-            const modal = new ModalBuilder().setCustomId('suggestModal').setTitle('Trimite o sugestie');
-            const input = new TextInputBuilder().setCustomId('sugestieText').setLabel('Sugestia ta').setStyle(TextInputStyle.Paragraph);
-            modal.addComponents(new ActionRowBuilder().addComponents(input));
-            await interaction.showModal(modal);
+        if (i.commandName === 'suspect') {
+            const u = i.options.getUser('user');
+            const motiv = i.options.getString('motiv');
+            await i.reply({ embeds: [new EmbedBuilder().setTitle("⚠️ Utilizator Suspect").setDescription(`**User:** ${u}\n**Motiv:** ${motiv}`).setColor("#ffff00")] });
         }
-    } else if (interaction.isModalSubmit() && interaction.customId === 'suggestModal') {
-        const text = interaction.fields.getTextInputValue('sugestieText');
-        await interaction.reply({ content: `✅ Sugestia ta a fost trimisă: "${text}"`, ephemeral: true });
-        // Aici poți adăuga codul să trimită mesajul într-un canal specific
+
+        if (i.commandName === 'suggestionpanel') {
+            const modal = new ModalBuilder().setCustomId('suggestModal').setTitle('Trimite o sugestie');
+            modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('sugestieText').setLabel('Sugestia ta').setStyle(TextInputStyle.Paragraph)));
+            await i.showModal(modal);
+        }
+    } else if (i.isModalSubmit() && i.customId === 'suggestModal') {
+        await i.reply({ content: `✅ Sugestia ta a fost trimisă.`, ephemeral: true });
     }
 });
 
