@@ -5,30 +5,29 @@ http.createServer((req, res) => res.end("Bot activ!")).listen(process.env.PORT |
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 
-// --- CONFIGURARE ---
 const VOUCH_CHANNEL_ID = '1514651853348929738'; 
-let economie = {};
 
 client.once('ready', async () => {
     console.log(`✅ ${client.user.tag} este ONLINE!`);
     
-    // Înregistrare Slash Commands
     const commands = [
-        { name: 'ban', description: 'Ban', options: [{name:'user', type:6, required:true}, {name:'reason', type:3, required:false}] },
-        { name: 'kick', description: 'Kick', options: [{name:'user', type:6, required:true}, {name:'reason', type:3, required:false}] },
-        { name: 'warn', description: 'Warn', options: [{name:'user', type:6, required:true}, {name:'reason', type:3, required:false}] },
-        { name: 'clearwarns', description: 'Clear', options: [{name:'user', type:6, required:true}] },
-        { name: 'supportpanel', description: 'Panel Support' }
+        { name: 'ban', description: 'Ban user', options: [{name:'user', type:6, description:'User', required:true}, {name:'reason', type:3, description:'Motiv', required:false}] },
+        { name: 'kick', description: 'Kick user', options: [{name:'user', type:6, description:'User', required:true}, {name:'reason', type:3, description:'Motiv', required:false}] },
+        { name: 'warn', description: 'Warn user', options: [{name:'user', type:6, description:'User', required:true}, {name:'reason', type:3, description:'Motiv', required:false}] },
+        { name: 'clearwarns', description: 'Clear warns', options: [{name:'user', type:6, description:'User', required:true}] },
+        { name: 'supportpanel', description: 'Postează panoul de suport' }
     ];
+    
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+    try {
+        await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+        console.log('✅ Comenzile au fost încărcate!');
+    } catch (e) { console.error('Eroare la comenzi:', e); }
 });
 
-// --- COMENZI PREFIX (Vouch + Economie) ---
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.content.startsWith('+')) return;
     const args = message.content.split(' ');
-    const id = message.author.id;
 
     if (message.content.startsWith('+p')) {
         const user = message.mentions.users.first() || message.author;
@@ -39,17 +38,14 @@ client.on('messageCreate', async (message) => {
         const target = message.mentions.users.first();
         const comentariu = args.slice(2).join(' ');
         if (!target || !comentariu) return message.reply("❌ Format incorect! Folosește: +vouch @user <comentariu>");
-        
-        // Trimite în canalul de staff
         const channel = message.guild.channels.cache.get(VOUCH_CHANNEL_ID);
         if (channel) {
             await channel.send(`🔔 **Vouch de la ${message.author.username} pentru ${target.username}**: ${comentariu}`);
-            return message.reply("✅ Vouch-ul tău a fost trimis spre verificare către echipa Staff!");
+            return message.reply("✅ Vouch-ul tău a fost trimis spre verificare!");
         }
     }
 });
 
-// --- INTERACȚIUNI (Panel + Moderare) ---
 client.on('interactionCreate', async (i) => {
     if (i.isChatInputCommand()) {
         await i.deferReply({ ephemeral: false });
@@ -64,6 +60,8 @@ client.on('interactionCreate', async (i) => {
         }
         if (i.commandName === 'warn') return i.editReply(`⚠️ ${i.options.getMember('user')} a primit un avertisment!`);
         if (i.commandName === 'clearwarns') return i.editReply(`🧹 Toate avertismentele lui ${i.options.getMember('user')} au fost șterse!`);
+        if (i.commandName === 'ban') return i.editReply(`✅ ${i.options.getMember('user')} a fost banat.`);
+        if (i.commandName === 'kick') return i.editReply(`✅ ${i.options.getMember('user')} a fost dat afară.`);
     }
 
     if (i.isButton()) {
@@ -76,4 +74,4 @@ client.on('interactionCreate', async (i) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-                                
+        
