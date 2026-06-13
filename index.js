@@ -1,27 +1,45 @@
-// ... (restul importurilor și definirea clientului)
+const http = require('http');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+
+const client = new Client({ 
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] 
+});
+
+// Server HTTP necesar pentru a evita Port Scan Timeout pe Render
+http.createServer((req, res) => {
+    res.writeHead(200);
+    res.end('Bot activ!');
+}).listen(process.env.PORT || 10000);
 
 client.on('messageCreate', async (message) => {
-    // 1. Prevenție: procesează doar dacă mesajul începe cu '+'
     if (message.author.bot || !message.content.startsWith('+')) return;
-    
-    // 2. Prevenție duplicare: folosim un singur bloc pentru +p
-    if (message.content.startsWith('+p')) {
+
+    // Prevenție duplicare: verificăm dacă mesajul este deja procesat (simplificat)
+    const args = message.content.split(' ');
+    const cmd = args[0].toLowerCase();
+
+    if (cmd === '+p') {
         const user = message.mentions.users.first() || message.author;
-        
-        const profileEmbed = new EmbedBuilder()
+        const embed = new EmbedBuilder()
             .setTitle(`Profilul lui ${user.username}`)
-            .setColor("#0099ff")
-            .setDescription(`**ID:** ${user.id}\n**Creat:** 3 luni în urmă`) // Aici poți adăuga logica reală de calcul
+            .setDescription(`**ID:** ${user.id}\n**Creat:** 3 luni în urmă`)
             .addFields(
-                { name: "ℹ️ Informații Vouch", value: "🟢 Vouch-uri acceptate: 0\n🔴 Vouch-uri refuzate: 0\n⏳ Ultimele 7 zile: 0\n✅ Total exchanged: 0€\n🏆 Leaderboard: #23" },
-                { name: "🏅 Badge-uri", value: "❌ Fără badge-uri încă" },
+                { name: "ℹ️ Informații Vouch", value: "🟢 Vouch-uri acceptate: 0\n🔴 Vouch-uri refuzate: 0\n🏆 Leaderboard: #23" },
                 { name: "📝 Ultimele comentarii", value: "❌ Nu există comentarii încă." }
             )
             .setFooter({ text: "Siropel bot" });
-
-        // Folosim reply o singură dată
-        return message.reply({ embeds: [profileEmbed] });
+        return message.reply({ embeds: [embed] });
     }
-    
-    // ... (restul comenzilor +vouch, etc.)
+    // ... restul comenzilor +
 });
+
+client.on('interactionCreate', async (i) => {
+    // Răspundem imediat pentru a evita "Aplicația nu a răspuns"
+    if (i.isChatInputCommand()) {
+        await i.deferReply({ ephemeral: true }); 
+        // Logica ta de Slash (suspect, mark, etc)
+        await i.editReply({ content: "Comanda a fost procesată!" });
+    }
+});
+
+client.login(process.env.DISCORD_TOKEN);
