@@ -2,19 +2,18 @@ const http = require('http');
 http.createServer((req, res) => res.end("Bot activ!")).listen(process.env.PORT || 3000);
 
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
+// Am adăugat MessageContent pentru ca "+p" să meargă
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 
 const STAFF_ROLE_ID = '1490701828831052027';
 
 const commands = [
-    new SlashCommandBuilder().setName('help').setDescription('Arata toate comenzile'),
     new SlashCommandBuilder().setName('supportpanel').setDescription('Panou de support'),
-    new SlashCommandBuilder().setName('warn').setDescription('Da warn').addUserOption(o=>o.setName('user').setDescription('User').setRequired(true)).addStringOption(o=>o.setName('motiv').setDescription('Motiv').setRequired(true)),
-    new SlashCommandBuilder().setName('timeout').setDescription('Da timeout').addUserOption(o=>o.setName('user').setDescription('User').setRequired(true)).addIntegerOption(o=>o.setName('minute').setDescription('Minute').setRequired(true)),
-    new SlashCommandBuilder().setName('untimeout').setDescription('Scoate timeout').addUserOption(o=>o.setName('user').setDescription('User').setRequired(true)),
-    new SlashCommandBuilder().setName('ban').setDescription('Ban user').addUserOption(o=>o.setName('user').setDescription('User').setRequired(true)),
-    new SlashCommandBuilder().setName('unban').setDescription('Unban user').addStringOption(o=>o.setName('userid').setDescription('ID user').setRequired(true)),
-    new SlashCommandBuilder().setName('kick').setDescription('Kick user').addUserOption(o=>o.setName('user').setDescription('User').setRequired(true))
+    new SlashCommandBuilder().setName('suspect').setDescription('Marcheaza un suspect').addUserOption(o=>o.setName('user').setDescription('User').setRequired(true)).addStringOption(o=>o.setName('motiv').setDescription('Motiv').setRequired(true)),
+    new SlashCommandBuilder().setName('mark').setDescription('Marcheaza un scammer').addUserOption(o=>o.setName('user').setDescription('User').setRequired(true)).addStringOption(o=>o.setName('motiv').setDescription('Motiv').setRequired(true)),
+    new SlashCommandBuilder().setName('giveaway').setDescription('Porneste giveaway'),
+    new SlashCommandBuilder().setName('clear').setDescription('Sterge mesaje').addIntegerOption(o=>o.setName('nr').setDescription('Numar').setRequired(true)),
+    new SlashCommandBuilder().setName('suggestionpanel').setDescription('Panou sugestii')
 ].map(c => c.toJSON());
 
 client.once('ready', async () => {
@@ -23,29 +22,25 @@ client.once('ready', async () => {
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
 });
 
+// Sistemul de mesaje pentru "+p", "+vouch", "+profile", "+leaderboard"
 client.on('messageCreate', async (message) => {
-    if (message.content === '+p') message.reply(`Pong! Latenta: ${client.ws.ping}ms`);
+    if (message.author.bot) return;
+    
+    if (message.content.startsWith('+p')) {
+        const user = message.mentions.users.first() || message.author;
+        message.reply(`Profilul lui ${user.username} este gata! (Sistem Vouch activ)`);
+    }
+    if (message.content.startsWith('+vouch')) message.reply("✅ Vouch înregistrat!");
+    if (message.content.startsWith('+profile')) message.reply("📋 Acesta este profilul tău.");
+    if (message.content.startsWith('+leaderboard')) message.reply("🏆 Iată topul utilizatorilor!");
 });
 
 client.on('interactionCreate', async i => {
+    if (!i.isChatInputCommand() && !i.isButton()) return;
+
     if (i.isChatInputCommand()) {
-        if (i.commandName === 'help') {
-            const embed = new EmbedBuilder()
-                .setTitle("🛠️ Comenzi VISIUM")
-                .setDescription("Acestea sunt comenzile disponibile:")
-                .addFields(
-                    { name: '/supportpanel', value: 'Panoul de tichete' },
-                    { name: '/warn /timeout /ban /kick', value: 'Comenzi de moderare' },
-                    { name: '+p', value: 'Verifica latenta (scris in chat)' }
-                ).setColor("#2b2d31");
-            await i.reply({ embeds: [embed] });
-        }
-        
         if (i.commandName === 'supportpanel') {
-            const embed = new EmbedBuilder()
-                .setTitle("VISIUM Support Panel")
-                .setDescription("👷 **Support** | 🏦 **Purchase** | 🎁 **Claim Reward**")
-                .setColor("#2b2d31");
+            const embed = new EmbedBuilder().setTitle("VISIUM Support Panel").setDescription("👷 **Support** | 🏦 **Purchase** | 🎁 **Claim Reward**").setColor("#2b2d31");
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('ticket_support').setLabel('Support').setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('ticket_purchase').setLabel('Purchase').setStyle(ButtonStyle.Success),
@@ -53,27 +48,20 @@ client.on('interactionCreate', async i => {
             );
             await i.reply({ embeds: [embed], components: [row] });
         }
-        
-        if (i.commandName === 'warn') await i.reply(`✅ Warn dat lui ${i.options.getUser('user').tag}.`);
-        if (i.commandName === 'timeout') { await i.options.getMember('user').timeout(i.options.getInteger('minute') * 60 * 1000); await i.reply('✅ Timeout aplicat.'); }
-        if (i.commandName === 'untimeout') { await i.options.getMember('user').timeout(null); await i.reply('✅ Timeout eliminat.'); }
-        if (i.commandName === 'ban') { await i.guild.members.ban(i.options.getUser('user')); await i.reply('✅ Ban aplicat.'); }
-        if (i.commandName === 'unban') { await i.guild.members.unban(i.options.getString('userid')); await i.reply('✅ Unban aplicat.'); }
-        if (i.commandName === 'kick') { await i.guild.members.kick(i.options.getUser('user')); await i.reply('✅ Kick aplicat.'); }
-    } 
-    else if (i.isButton() && i.customId.startsWith('ticket_')) {
+        // Restul comenzilor Slash...
+        if (i.commandName === 'mark') await i.reply(`🚨 ${i.options.getUser('user')} marcat ca scammer.`);
+        if (i.commandName === 'suspect') await i.reply(`⚠️ ${i.options.getUser('user')} marcat ca suspect.`);
+    }
+
+    if (i.isButton() && i.customId.startsWith('ticket_')) {
         const type = i.customId.split('_')[1];
         const channel = await i.guild.channels.create({
             name: `${type}-${i.user.username}`,
             permissionOverwrites: [{ id: i.guild.id, deny: ['ViewChannel'] }, { id: i.user.id, allow: ['ViewChannel', 'SendMessages'] }, { id: STAFF_ROLE_ID, allow: ['ViewChannel', 'SendMessages'] }]
         });
-        const btn = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close').setLabel('Închide').setStyle(ButtonStyle.Danger));
-        await channel.send({ content: `<@&${STAFF_ROLE_ID}>`, embeds: [new EmbedBuilder().setTitle("Tichet").setDescription(`Tichet de ${type} deschis de ${i.user}`).setColor("#00ff00")], components: [btn] });
         await i.reply({ content: `✅ Tichet creat: ${channel}`, ephemeral: true });
-    } else if (i.isButton() && i.customId === 'close') {
-        await i.channel.delete();
     }
+    if (i.isButton() && i.customId === 'close') await i.channel.delete();
 });
 
 client.login(process.env.DISCORD_TOKEN);
-        
