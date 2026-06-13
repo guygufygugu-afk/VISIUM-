@@ -1,57 +1,44 @@
-const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
+const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder } = require('discord.js');
 const fs = require('fs');
+const path = require('path');
 
-// --- ÎNCĂRCARE BAZĂ DE DATE ---
-const db = JSON.parse(fs.readFileSync('./data.json', 'utf8')); // Asigură-te că ai acest fișier
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 
-client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
+// --- Calea sigură către data.json ---
+const dbPath = path.join(process.cwd(), 'data.json');
 
+// --- Funcție sigură de încărcare ---
+function getDB() {
     try {
-        // --- SISTEM MARK (SCAMMER/HACKER) ---
-        if (interaction.commandName === 'mark') {
-            const user = interaction.options.getUser('user');
-            const tip = interaction.options.getString('tip');
-            const motiv = interaction.options.getString('motiv');
-            const embed = new EmbedBuilder()
-                .setTitle(`${tip.toUpperCase()} MARCAT`)
-                .setColor(0xFF0000)
-                .setDescription(`🚨 Utilizator marcat: ${tip}`)
-                .addFields({ name: '👤 Utilizator', value: `<@${user.id}>` }, { name: '≫ Motiv', value: motiv });
-            await interaction.reply({ embeds: [embed] });
-        }
+        if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, '{}');
+        return JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+    } catch (e) {
+        return {};
+    }
+}
 
-        // --- SISTEM WARNS ---
-        if (interaction.commandName === 'warn') {
-            const user = interaction.options.getUser('user');
-            // Logica: Adaugă în JSON, apoi:
-            await interaction.reply(`⚠️ Utilizatorul ${user.tag} a primit un avertisment.`);
-        }
+client.on('messageCreate', async (message) => {
+    if (message.author.bot) return;
 
-        if (interaction.commandName === 'warns') {
-            const user = interaction.options.getUser('user');
-            await interaction.reply(`📊 ${user.username} are X avertismente.`);
-        }
-
-        // --- SISTEM PROFIL (+p) ---
-        if (interaction.commandName === 'p') {
-            const user = interaction.options.getUser('user') || interaction.user;
-            const embed = new EmbedBuilder()
-                .setTitle(`👤 Profil: ${user.username}`)
-                .addFields({ name: '⭐ Vouch-uri', value: '0' });
-            await interaction.reply({ embeds: [embed] });
-        }
-
-        // --- SISTEM OWO ---
-        if (interaction.commandName === 'owo') {
-            await interaction.reply("🐾 Ai vânat și ai găsit 50 monede!");
-        }
-
-    } catch (error) {
-        console.error(error);
-        await interaction.reply({ content: 'A apărut o eroare!', ephemeral: true });
+    // Exemplu +p (Profil)
+    if (message.content.startsWith("+p")) {
+        const db = getDB();
+        const user = message.mentions.users.first() || message.author;
+        const embed = new EmbedBuilder()
+            .setTitle(`Profil: ${user.username}`)
+            .setDescription(`Vouch-uri: ${db[user.id]?.total || 0}`);
+        message.reply({ embeds: [embed] });
     }
 });
 
-client.login('TOKEN_AICI');
+// Aici adaugi restul comenzilor slash menționate anterior
+client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
+    
+    // Exemplu Mark Scammer
+    if (interaction.commandName === 'mark') {
+        await interaction.reply("Utilizator marcat ca scammer.");
+    }
+});
+
+client.login(process.env.DISCORD_TOKEN);
