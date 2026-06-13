@@ -7,6 +7,7 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 const STAFF_ROLE_ID = '1490701828831052027';
 
 const commands = [
+    new SlashCommandBuilder().setName('help').setDescription('Arata toate comenzile'),
     new SlashCommandBuilder().setName('supportpanel').setDescription('Panou de support'),
     new SlashCommandBuilder().setName('warn').setDescription('Da warn').addUserOption(o=>o.setName('user').setDescription('User').setRequired(true)).addStringOption(o=>o.setName('motiv').setDescription('Motiv').setRequired(true)),
     new SlashCommandBuilder().setName('timeout').setDescription('Da timeout').addUserOption(o=>o.setName('user').setDescription('User').setRequired(true)).addIntegerOption(o=>o.setName('minute').setDescription('Minute').setRequired(true)),
@@ -22,12 +23,28 @@ client.once('ready', async () => {
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
 });
 
+client.on('messageCreate', async (message) => {
+    if (message.content === '+p') message.reply(`Pong! Latenta: ${client.ws.ping}ms`);
+});
+
 client.on('interactionCreate', async i => {
     if (i.isChatInputCommand()) {
+        if (i.commandName === 'help') {
+            const embed = new EmbedBuilder()
+                .setTitle("🛠️ Comenzi VISIUM")
+                .setDescription("Acestea sunt comenzile disponibile:")
+                .addFields(
+                    { name: '/supportpanel', value: 'Panoul de tichete' },
+                    { name: '/warn /timeout /ban /kick', value: 'Comenzi de moderare' },
+                    { name: '+p', value: 'Verifica latenta (scris in chat)' }
+                ).setColor("#2b2d31");
+            await i.reply({ embeds: [embed] });
+        }
+        
         if (i.commandName === 'supportpanel') {
             const embed = new EmbedBuilder()
                 .setTitle("VISIUM Support Panel")
-                .setDescription("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n👷 **Ai nevoie de ajutor? Deschide un ticket de support.**\n🏦 **Pentru cumpărare, apasă Purchase. Fără alte opțiuni.**\n🎁 **Ai de revendicat un reward? Deschide Claim Reward.**\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                .setDescription("👷 **Support** | 🏦 **Purchase** | 🎁 **Claim Reward**")
                 .setColor("#2b2d31");
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('ticket_support').setLabel('Support').setStyle(ButtonStyle.Primary),
@@ -36,14 +53,15 @@ client.on('interactionCreate', async i => {
             );
             await i.reply({ embeds: [embed], components: [row] });
         }
-        // Moderare
-        if (i.commandName === 'warn') { await i.reply(`✅ Warn dat lui ${i.options.getUser('user').tag}. Motiv: ${i.options.getString('motiv')}`); }
+        
+        if (i.commandName === 'warn') await i.reply(`✅ Warn dat lui ${i.options.getUser('user').tag}.`);
         if (i.commandName === 'timeout') { await i.options.getMember('user').timeout(i.options.getInteger('minute') * 60 * 1000); await i.reply('✅ Timeout aplicat.'); }
         if (i.commandName === 'untimeout') { await i.options.getMember('user').timeout(null); await i.reply('✅ Timeout eliminat.'); }
         if (i.commandName === 'ban') { await i.guild.members.ban(i.options.getUser('user')); await i.reply('✅ Ban aplicat.'); }
         if (i.commandName === 'unban') { await i.guild.members.unban(i.options.getString('userid')); await i.reply('✅ Unban aplicat.'); }
         if (i.commandName === 'kick') { await i.guild.members.kick(i.options.getUser('user')); await i.reply('✅ Kick aplicat.'); }
-    } else if (i.isButton() && i.customId.startsWith('ticket_')) {
+    } 
+    else if (i.isButton() && i.customId.startsWith('ticket_')) {
         const type = i.customId.split('_')[1];
         const channel = await i.guild.channels.create({
             name: `${type}-${i.user.username}`,
@@ -58,3 +76,4 @@ client.on('interactionCreate', async i => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
+        
