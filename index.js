@@ -1,135 +1,89 @@
-/**
- * VISIUM BOT - FULL ENTERPRISE EDITION
- * Include: HTTP Keep-Alive, Welcome/Bye, Moderare, Economie, Tichete, Logs
- */
-
+const fs = require('fs');
 const http = require('http');
-// Server pentru a preveni "adormirea" botului pe platforme tip host
-http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end("VISIUM BOT - SYSTEM ONLINE");
-}).listen(process.env.PORT || 10000);
+http.createServer((req, res) => res.end("System Online")).listen(process.env.PORT || 10000);
 
-const { 
-    Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, 
-    ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, 
-    Events 
-} = require('discord.js');
-
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, Events } = require('discord.js');
 const client = new Client({ intents: [3276799] });
 
-// Baza de date în memorie
-const db = { bal: new Map(), warns: new Map(), xp: new Map() };
+const CHANNELS = { LOGS: '1496563852052136016', WELCOME: '1492880249518686280', BYE: '1513435916515934248' };
+let db = { bal: new Map() };
 
-client.once(Events.ClientReady, () => {
-    console.log(`[SYSTEM] VISIUM este online: ${client.user.tag}`);
+if (fs.existsSync('./data.json')) {
+    const raw = fs.readFileSync('./data.json');
+    const d = JSON.parse(raw);
+    db.bal = new Map(Object.entries(d.bal || {}));
+}
+const save = () => fs.writeFileSync('./data.json', JSON.stringify({ bal: Object.fromEntries(db.bal) }, null, 2));
+
+client.once(Events.ClientReady, () => console.log(`[SYSTEM] VISIUM Online: ${client.user.tag}`));
+
+// WELCOME/BYE
+client.on(Events.GuildMemberAdd, async m => {
+    const ch = await m.guild.channels.fetch(CHANNELS.WELCOME).catch(() => null);
+    if (ch) ch.send(`👋 Bun venit, ${m.user}!`);
+});
+client.on(Events.GuildMemberRemove, async m => {
+    const ch = await m.guild.channels.fetch(CHANNELS.BYE).catch(() => null);
+    if (ch) ch.send(`😢 ${m.user.tag} a părăsit serverul.`);
 });
 
-/* 
-==========================================================
-SISTEM WELCOME & BYE
-==========================================================
-*/
-client.on(Events.GuildMemberAdd, member => {
-    const channel = member.guild.systemChannel;
-    if (!channel) return;
-    const embed = new EmbedBuilder()
-        .setTitle("👋 Bun venit!")
-        .setDescription(`Salut ${member.user}, bine ai venit pe ${member.guild.name}!`)
-        .setColor(0x00FF00);
-    channel.send({ embeds: [embed] });
-});
-
-client.on(Events.GuildMemberRemove, member => {
-    const channel = member.guild.systemChannel;
-    if (!channel) return;
-    const embed = new EmbedBuilder()
-        .setTitle("😢 Ne pare rău...")
-        .setDescription(`${member.user.tag} a părăsit serverul nostru.`)
-        .setColor(0xFF0000);
-    channel.send({ embeds: [embed] });
-});
-
-/* 
-==========================================================
-SISTEM DE COMENZI PREFIX (Conversație)
-==========================================================
-*/
+// COMENZI PREFIX
 client.on(Events.MessageCreate, async (m) => {
     if (m.author.bot || !m.content.startsWith('+')) return;
     const args = m.content.slice(1).split(/ +/);
     const cmd = args.shift().toLowerCase();
 
-    if (cmd === 'balance') m.reply(`💰 Balanța ta: ${db.bal.get(m.author.id) || 0} monede.`);
+    if (cmd === 'balance') m.reply(`💰 Balanță: ${db.bal.get(m.author.id) || 0}`);
     if (cmd === 'daily') {
         db.bal.set(m.author.id, (db.bal.get(m.author.id) || 0) + 500);
-        m.reply("🎁 Ai revendicat 500 monede!");
+        save();
+        m.reply("🎁 500 monede primite!");
+    }
+    if (cmd === 'give') {
+        const target = m.mentions.users.first();
+        const amt = parseInt(args[1]);
+        if (!target || isNaN(amt)) return m.reply("Folosește: +give @user suma");
+        db.bal.set(target.id, (db.bal.get(target.id) || 0) + amt);
+        save();
+        m.reply(`✅ Transferat ${amt} monede către ${target.tag}.`);
     }
     if (cmd === 'purge') {
         const amt = parseInt(args[0]);
-        if (!amt || amt > 100) return m.reply("Introdu o sumă între 1-100");
         await m.channel.bulkDelete(amt + 1);
-        const msg = await m.channel.send(`🧹 Am șters ${amt} mesaje.`);
-        setTimeout(() => msg.delete(), 3000);
+        m.reply(`🧹 Șters ${amt} mesaje.`);
     }
 });
 
-/* 
-==========================================================
-SISTEM DE INTERACȚIUNI SLASH (Butoane, Tichete, Info)
-==========================================================
-*/
+// SLASH & TICHETE
 client.on(Events.InteractionCreate, async (i) => {
     if (i.isChatInputCommand()) {
         await i.deferReply({ ephemeral: true });
-
-        if (i.commandName === 'ban') {
-            const member = i.options.getMember('user');
-            await member.ban();
-            i.editReply("🔨 Membru banat!");
-        }
-
+        if (i.commandName === 'ban') { await i.options.getMember('user').ban(); i.editReply("🔨 Banat!"); }
+        if (i.commandName === 'kick') { await i.options.getMember('user').kick(); i.editReply("👢 Kick-at!"); }
         if (i.commandName === 'serverinfo') {
-            const { guild } = i;
-            const embed = new EmbedBuilder().setTitle(`📊 Info: ${guild.name}`)
-                .addFields(
-                    { name: "👑 Owner", value: `<@${guild.ownerId}>`, inline: true },
-                    { name: "👥 Membri", value: `${guild.memberCount}`, inline: true },
-                    { name: "📅 Creat", value: `${guild.createdAt.toDateString()}`, inline: true }
-                );
+            const embed = new EmbedBuilder().setTitle(`📊 ${i.guild.name}`).addFields({ name: "Membri", value: `${i.guild.memberCount}`, inline: true });
             i.editReply({ embeds: [embed] });
         }
-
         if (i.commandName === 'supportpanel') {
-            const embed = new EmbedBuilder().setTitle("VISIUM Support Panel")
-                .setDescription("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n** 👷Ai nevoie de ajutor? Deschide un tichet.**\n** 🏦Pentru cumpărare, apasă Purchase.**\n** 🎁Ai de revendicat un reward?**\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('tic_sup').setLabel('Support').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('tic_pur').setLabel('Purchase').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('tic_cla').setLabel('Claim Reward').setStyle(ButtonStyle.Secondary)
+                new ButtonBuilder().setCustomId('tic_pur').setLabel('Purchase').setStyle(ButtonStyle.Success)
             );
-            i.editReply({ embeds: [embed], components: [row] });
+            i.editReply({ embeds: [new EmbedBuilder().setTitle("VISIUM Support")], components: [row] });
         }
     }
-
     if (i.isButton()) {
         await i.deferReply({ ephemeral: true });
-        const ch = await i.guild.channels.create({
-            name: `${i.customId}-${i.user.username}`,
-            type: ChannelType.GuildText,
-            permissionOverwrites: [{ id: i.guild.id, deny: [PermissionFlagsBits.ViewChannel] }, { id: i.user.id, allow: [PermissionFlagsBits.ViewChannel] }]
-        });
-        i.editReply(`✅ Tichet deschis: ${ch}`);
+        const ch = await i.guild.channels.create({ name: `${i.customId}-${i.user.username}`, type: ChannelType.GuildText });
+        i.editReply(`✅ Tichet creat: ${ch}`);
     }
 });
 
-/* 
-==========================================================
-SISTEM DE LOG-URI (Audit)
-==========================================================
-*/
-client.on(Events.MessageDelete, m => console.log(`[LOG] Mesaj șters: ${m.content}`));
-client.on(Events.MessageUpdate, (o, n) => console.log(`[LOG] Editat: ${o.content} -> ${n.content}`));
+// LOGS
+client.on(Events.MessageDelete, async m => {
+    const ch = await m.guild.channels.fetch(CHANNELS.LOGS).catch(() => null);
+    if (ch) ch.send(`🗑️ Mesaj șters în ${m.channel.name}: ${m.content}`);
+});
 
-// LOGIN (Folosește process.env.DISCORD_TOKEN în fișierul .env)
 client.login(process.env.DISCORD_TOKEN);
+            
