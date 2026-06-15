@@ -364,9 +364,9 @@ client.on('interactionCreate', async interaction => {
             const targetId = parts[3];
 
             const originalEmbed = interaction.message.embeds[0];
-            const safeRegex = new RegExp('```\\n([\\s\\S]*?)\\n
-```');
-            const commentMatch = originalEmbed.description.match(safeRegex);
+            
+            // === MODIFICARE AICI: Regex nativ direct pentru a evita SyntaxError ===
+            const commentMatch = originalEmbed.description.match(/```\n([\s\S]*?)\n```/);
             const commentText = commentMatch ? commentMatch[1] : "Fără comentariu identificat";
 
             if (action === 'accept') {
@@ -397,4 +397,4 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.login(TOKEN);
-                
+                    
