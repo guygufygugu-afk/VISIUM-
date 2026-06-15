@@ -1,7 +1,15 @@
 {
-  "name": "bot-test",
+  "name": "visium-bot",
   "version": "1.0.0",
+  "description": "Bot oficial pentru comunitatea Visium",
   "main": "index.js",
-  "scripts": { "start": "node index.js" },
-  "dependencies": { "discord.js": "^14.14.1" }
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "express": "^4.19.2"
+  },
+  "author": "Visium",
+  "license": "ISC"
 }
