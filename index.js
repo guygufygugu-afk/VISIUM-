@@ -24,7 +24,6 @@ const {
     Routes
 } = require('discord.js');
 
-// === CONFIGURAȚIE SECURIZATĂ ȘI ACTUALIZATĂ ===
 const TOKEN = process.env.TOKEN; 
 const CLIENT_ID = '1514313530869026867'; 
 const STAFF_ROLE_ID = '1490701828831052027'; 
@@ -32,7 +31,6 @@ const TICKET_PING_ROLE_ID = '1490701828831052027';
 const TICKET_CATEGORY_ID = '1492885716856868978'; 
 const VERIFY_CHANNEL_ID = '1514651853348929738';   
 
-// Stocare temporară în memorie (se resetează la restart)
 const userWarns = new Map();
 const userVouches = new Map();
 
@@ -46,7 +44,6 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
-// DEFINIRE COMENZI SLASH
 const commands = [
     { name: 'ping', description: 'Vezi latența botului.' },
     { 
@@ -80,10 +77,8 @@ const commands = [
 
 client.once('ready', async () => {
     console.log(`🤖 Logat cu succes ca ${client.user.tag}`);
-    
     const rest = new REST({ version: '10' }).setToken(TOKEN);
     try {
-        console.log('Se încarcă comenzile slash...');
         await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
         console.log('Toate comenzile slash au fost configurate global!');
     } catch (error) {
@@ -91,7 +86,6 @@ client.once('ready', async () => {
     }
 });
 
-// === SISTEMUL DE VOUCH (+vouch / +p) ===
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
@@ -154,10 +148,7 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// === HANDLER INTERACȚIUNI ===
 client.on('interactionCreate', async interaction => {
-    
-    // 1. COMENZI SLASH
     if (interaction.isChatInputCommand()) {
         const { commandName } = interaction;
 
@@ -252,7 +243,6 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 2. LOGICA SELECT MENU - CREARE TICKET DINAMIC + FILTRARE NUME
     if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'select_ticket') {
             const type = interaction.values[0];
@@ -315,9 +305,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 3. BUTOANE INTERACTIVE (VOUCH + LOGICĂ TICKET CLAIM/CLOSE)
     if (interaction.isButton()) {
-        
         if (interaction.customId.startsWith('ticket_claim_')) {
             if (!interaction.member.roles.cache.has(STAFF_ROLE_ID) && !interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
                 return interaction.reply({ content: '❌ Doar membrii Staff pot prelua acest ticket!', ephemeral: true });
@@ -409,4 +397,4 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.login(TOKEN);
-                          
+                
