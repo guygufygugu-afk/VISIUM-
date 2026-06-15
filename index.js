@@ -205,7 +205,6 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply(`🧹 Toate avertismentele aplicate utilizatorului ${target} au fost șterse.`);
         }
 
-        // COMANDĂ MARK CONFORM MODELULUI
         if (commandName === 'mark') {
             if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
                 return interaction.reply({ content: '❌ Doar membrii Staff pot marca un scammer.', ephemeral: true });
@@ -234,7 +233,9 @@ client.on('interactionCreate', async interaction => {
             const ticketEmbed = new EmbedBuilder()
                 .setTitle('VISIUM Support Panel')
                 .setDescription('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n** 👷Ai nevoie de ajutor? Deschide un ticket de support.**\n** 🏦Pentru cumpărare, apasă Purchase. Fără alte opțiuni.**\n** 🎁Ai de revendicat un reward? Deschide Claim Reward.**\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-                .setColor('#2b2d31');
+                .setColor('#2b2d31')
+                // Aici am adăugat bannerul cel nou! Poți schimba link-ul oricând cu imaginea ta.
+                .setImage('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&auto=format&fit=crop');
 
             const row = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
@@ -252,11 +253,26 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 2. LOGICA SELECT MENU - CREARE TICKET + PING ROL
+    // 2. LOGICA SELECT MENU - CREARE TICKET DINAMIC + FILTRARE NUME
     if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'select_ticket') {
             const type = interaction.values[0];
-            const channelName = `ticket-${interaction.user.username.toLowerCase()}`;
+            
+            let prefixName = 'ticket';
+            let tipAfisat = 'SUPPORT';
+
+            if (type === 'ticket_support') { prefixName = 'suport'; tipAfisat = 'SUPPORT'; }
+            if (type === 'ticket_purchase') { prefixName = 'purchase'; tipAfisat = 'PURCHASE'; }
+            if (type === 'ticket_reward') { prefixName = 'reward'; tipAfisat = 'REWARD'; }
+
+            let cleanUsername = interaction.user.username.toLowerCase()
+                .replace(/[^a-z0-9-]/g, '')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '');
+            
+            if (!cleanUsername) cleanUsername = interaction.user.id;
+
+            const channelName = `${prefixName}-${cleanUsername}`;
 
             await interaction.deferReply({ ephemeral: true });
 
@@ -274,17 +290,24 @@ client.on('interactionCreate', async interaction => {
 
                 await interaction.editReply({ content: `✅ Ticketul tău a fost deschis cu succes în canalul: ${channel}` });
 
-                let tipAfisat = 'SUPPORT';
-                if (type === 'ticket_purchase') tipAfisat = 'PURCHASE';
-                if (type === 'ticket_reward') tipAfisat = 'REWARD';
-
                 const welcomeEmbed = new EmbedBuilder()
                     .setTitle(`Ticket nou generat - ${tipAfisat}`)
                     .setDescription(`Salutare <@${interaction.user.id}>! Echipa a fost alertată. Te rugăm să explici problema ta în detaliu aici și un operator îți va răspunde în cel mai scurt timp.`)
                     .setColor('Green')
                     .setTimestamp();
 
-                await channel.send({ content: `<@&${TICKET_PING_ROLE_ID}>`, embeds: [welcomeEmbed] });
+                const ticketButtons = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`ticket_claim_${interaction.user.id}`)
+                        .setLabel('📩 Claim Ticket')
+                        .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                        .setCustomId(`ticket_close_${interaction.user.id}`)
+                        .setLabel('🔒 Close Ticket')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+                await channel.send({ content: `<@&${TICKET_PING_ROLE_ID}>`, embeds: [welcomeEmbed], components: [ticketButtons] });
 
             } catch (err) {
                 console.error(err);
@@ -293,48 +316,97 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 3. BUTOANE DE INTERACȚIUNE (ACCEPTĂ/RESPINGE VOUCH)
+    // 3. BUTOANE INTERACTIVE (VOUCH + LOGICĂ TICKET CLAIM/CLOSE)
     if (interaction.isButton()) {
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
-            return interaction.reply({ content: '❌ Nu ai permisiunea necesară (Manage Messages) pentru a modera vouch-uri.', ephemeral: true });
-        }
-
-        const parts = interaction.customId.split('_');
-        const action = parts[1];
-        const authorId = parts[2];
-        const targetId = parts[3];
-
-        const originalEmbed = interaction.message.embeds[0];
         
-        // --- LINIA CORECTATĂ PENTRU SIGURANȚĂ MAXIMĂ LA COPY-PASTE ---
-        const safeRegex = new RegExp('```\\n([\\s\\S]*?)\\n```');
-        const commentMatch = originalEmbed.description.match(safeRegex);
-        const commentText = commentMatch ? commentMatch[1] : "Fără comentariu identificat";
+        if (interaction.customId.startsWith('ticket_claim_')) {
+            if (!interaction.member.roles.cache.has(STAFF_ROLE_ID) && !interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                return interaction.reply({ content: '❌ Doar membrii Staff pot prelua acest ticket!', ephemeral: true });
+            }
 
-        if (action === 'accept') {
-            let uData = userVouches.get(targetId) || { count: 0, reviews: [] };
-            uData.count++;
-            uData.reviews.push({ author: authorId, comment: commentText });
-            userVouches.set(targetId, uData);
+            const originalEmbed = interaction.message.embeds[0];
+            const claimedEmbed = EmbedBuilder.from(originalEmbed)
+                .addFields({ name: '📌 Preluat de:', value: `<@${interaction.user.id}>`, inline: false });
 
-            const acceptedEmbed = EmbedBuilder.from(originalEmbed)
-                .setTitle('✅ Vouch Aprobat de Staff')
-                .setColor('Green')
-                .setFooter({ text: `Confirmat de: ${interaction.user.username}` });
+            const disabledRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('claimed_disabled')
+                    .setLabel('🔒 Preluat de Staff')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(true),
+                new ButtonBuilder()
+                    .setCustomId(interaction.message.components[0].components[1].customId)
+                    .setLabel('🔒 Close Ticket')
+                    .setStyle(ButtonStyle.Danger)
+            );
 
-            await interaction.update({ embeds: [acceptedEmbed], components: [] });
-            await interaction.channel.send(`⭐ <@${targetId}> a primit un vouch aprobat de la <@${authorId}>!`);
+            await interaction.update({ embeds: [claimedEmbed], components: [disabledRow] });
+            return interaction.channel.send(`🙋‍♂️ <@${interaction.user.id}> a preluat acest ticket și te va ajuta imediat!`);
         }
 
-        if (action === 'reject') {
-            const rejectedEmbed = EmbedBuilder.from(originalEmbed)
-                .setTitle('❌ Vouch Respins de Staff')
-                .setColor('Red')
-                .setFooter({ text: `Respins de: ${interaction.user.username}` });
+        if (interaction.customId.startsWith('ticket_close_')) {
+            const ticketOwnerId = interaction.customId.split('_')[2];
+            const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
+            const isOwner = interaction.user.id === ticketOwnerId;
 
-            await interaction.update({ embeds: [rejectedEmbed], components: [] });
+            if (!isStaff && !isOwner) {
+                return interaction.reply({ content: '❌ Doar proprietarul ticketului sau membrii Staff pot închide acest canal!', ephemeral: true });
+            }
+
+            await interaction.reply('🔒 Acest ticket a fost marcat ca rezolvat și se va șterge în **5 secunde**...');
+            
+            setTimeout(async () => {
+                try {
+                    await interaction.channel.delete();
+                } catch (e) {
+                    console.error('Nu s-a putut șterge canalul:', e);
+                }
+            }, 5000);
+            return;
+        }
+
+        if (interaction.customId.startsWith('v_accept_') || interaction.customId.startsWith('v_reject_')) {
+            if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+                return interaction.reply({ content: '❌ Nu ai permisiunea necesară pentru a modera vouch-uri.', ephemeral: true });
+            }
+
+            const parts = interaction.customId.split('_');
+            const action = parts[1];
+            const authorId = parts[2];
+            const targetId = parts[3];
+
+            const originalEmbed = interaction.message.embeds[0];
+            const safeRegex = new RegExp('```\\n([\\s\\S]*?)\\n
+```');
+            const commentMatch = originalEmbed.description.match(safeRegex);
+            const commentText = commentMatch ? commentMatch[1] : "Fără comentariu identificat";
+
+            if (action === 'accept') {
+                let uData = userVouches.get(targetId) || { count: 0, reviews: [] };
+                uData.count++;
+                uData.reviews.push({ author: authorId, comment: commentText });
+                userVouches.set(targetId, uData);
+
+                const acceptedEmbed = EmbedBuilder.from(originalEmbed)
+                    .setTitle('✅ Vouch Aprobat de Staff')
+                    .setColor('Green')
+                    .setFooter({ text: `Confirmat de: ${interaction.user.username}` });
+
+                await interaction.update({ embeds: [acceptedEmbed], components: [] });
+                await interaction.channel.send(`⭐ <@${targetId}> a primit un vouch aprobat de la <@${authorId}>!`);
+            }
+
+            if (action === 'reject') {
+                const rejectedEmbed = EmbedBuilder.from(originalEmbed)
+                    .setTitle('❌ Vouch Respins de Staff')
+                    .setColor('Red')
+                    .setFooter({ text: `Respins de: ${interaction.user.username}` });
+
+                await interaction.update({ embeds: [rejectedEmbed], components: [] });
+            }
         }
     }
 });
 
 client.login(TOKEN);
+                        
