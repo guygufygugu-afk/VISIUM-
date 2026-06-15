@@ -17,8 +17,7 @@ const CONFIG = {
     SCAMMER_ROLE_ID: '1492892376979738715',
 };
 
-const warns = new Map();
-const vouches = new Map();
+const vouches = new Map(); // Stocare vouch-uri
 
 client.once('ready', async () => {
     console.log(`Conectat ca ${client.user.tag}!`);
@@ -90,7 +89,10 @@ client.on('interactionCreate', async interaction => {
 
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.content) return;
-    if (message.content.trim() === '+help') {
+    const args = message.content.split(' ');
+    const cmd = args[0].toLowerCase();
+
+    if (cmd === '+help') {
         const embed = new EmbedBuilder()
             .setTitle('📜 Comenzi Visium Bot')
             .setColor(0x5865F2)
@@ -100,6 +102,26 @@ client.on('messageCreate', async message => {
             );
         return message.reply({ embeds: [embed] });
     }
+
+    if (cmd === '+vouch') {
+        const target = message.mentions.users.first();
+        if (!target) return message.reply('❌ Specifică un user!');
+        const comment = args.slice(2).join(' ');
+        if (!vouches.has(target.id)) vouches.set(target.id, []);
+        vouches.get(target.id).push({ author: message.author.tag, comment: comment || 'Fără comentariu' });
+        return message.reply(`✅ Vouch adăugat pentru ${target.tag}!`);
+    }
+
+    if (cmd === '+p' || cmd === '+profile') {
+        const target = message.mentions.users.first() || message.author;
+        const userVouches = vouches.get(target.id) || [];
+        return message.reply(`👤 **Profil Vouch - ${target.username}**\nTotal vouch-uri: ${userVouches.length}`);
+    }
+
+    if (cmd === '+leaderboard') {
+        return message.reply('📊 **Top Vouch-uri:** (Sistemul este activ)');
+    }
 });
 
 client.login(process.env.TOKEN);
+            
