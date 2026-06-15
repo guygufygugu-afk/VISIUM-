@@ -25,7 +25,7 @@ const {
 } = require('discord.js');
 
 // === CONFIGURAȚIE SECURIZATĂ ȘI ACTUALIZATĂ ===
-const TOKEN = process.env.TOKEN; // <<--- Citește tokenul în siguranță din Render! GitHub nu îl mai vede.
+const TOKEN = process.env.TOKEN; 
 const CLIENT_ID = '1514313530869026867'; 
 const STAFF_ROLE_ID = '1490701828831052027'; 
 const TICKET_PING_ROLE_ID = '1490701828831052027'; 
@@ -305,8 +305,10 @@ client.on('interactionCreate', async interaction => {
         const targetId = parts[3];
 
         const originalEmbed = interaction.message.embeds[0];
-        const commentMatch = originalEmbed.description.match(/```\n([\s\S]*?)\n
-```/);
+        
+        // --- LINIA CORECTATĂ PENTRU SIGURANȚĂ MAXIMĂ LA COPY-PASTE ---
+        const safeRegex = new RegExp('```\\n([\\s\\S]*?)\\n```');
+        const commentMatch = originalEmbed.description.match(safeRegex);
         const commentText = commentMatch ? commentMatch[1] : "Fără comentariu identificat";
 
         if (action === 'accept') {
@@ -336,4 +338,3 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.login(TOKEN);
-        
