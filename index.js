@@ -233,8 +233,7 @@ client.on('interactionCreate', async interaction => {
             const ticketEmbed = new EmbedBuilder()
                 .setTitle('VISIUM Support Panel')
                 .setDescription('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n** 👷Ai nevoie de ajutor? Deschide un ticket de support.**\n** 🏦Pentru cumpărare, apasă Purchase. Fără alte opțiuni.**\n** 🎁Ai de revendicat un reward? Deschide Claim Reward.**\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-                .setColor('#2b2d31')
-                // Aici am adăugat bannerul cel nou! Poți schimba link-ul oricând cu imaginea ta.
+                .setColor('Blurple')
                 .setImage('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&auto=format&fit=crop');
 
             const row = new ActionRowBuilder().addComponents(
@@ -324,6 +323,7 @@ client.on('interactionCreate', async interaction => {
                 return interaction.reply({ content: '❌ Doar membrii Staff pot prelua acest ticket!', ephemeral: true });
             }
 
+            const ticketOwnerId = interaction.customId.split('_')[2];
             const originalEmbed = interaction.message.embeds[0];
             const claimedEmbed = EmbedBuilder.from(originalEmbed)
                 .addFields({ name: '📌 Preluat de:', value: `<@${interaction.user.id}>`, inline: false });
@@ -335,7 +335,7 @@ client.on('interactionCreate', async interaction => {
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(true),
                 new ButtonBuilder()
-                    .setCustomId(interaction.message.components[0].components[1].customId)
+                    .setCustomId(`ticket_close_${ticketOwnerId}`)
                     .setLabel('🔒 Close Ticket')
                     .setStyle(ButtonStyle.Danger)
             );
@@ -409,4 +409,4 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.login(TOKEN);
-                        
+                          
