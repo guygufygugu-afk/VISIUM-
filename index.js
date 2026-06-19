@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ApplicationCommandOptionType } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ApplicationCommandOptionType, ButtonBuilder, ButtonStyle } = require('discord.js');
 const express = require('express');
 
 const app = express();
@@ -10,11 +10,11 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
-// AICI AM PUS LA LOC ID-URILE PENTRU TICKETE SI STAFF
 const CONFIG = {
     SCAMMER_ROLE_ID: '1492892376979738715',
     STAFF_ROLE_ID: '1490701828831052027',      
-    TICKET_CATEGORY_ID: '1492885716856868978'
+    TICKET_CATEGORY_ID: '1492885716856868978',
+    ALLOWED_CLOSE_ID: '1485154781247967356' // ID-ul setat de tine pentru inchidere
 };
 
 const vouches = new Map();
@@ -39,15 +39,29 @@ client.once('ready', async () => {
 
 client.on('interactionCreate', async interaction => {
     
-    // --- REZOLVAREA ERORII DE LA MENIUL DE TICKETE ---
+    // --- VERIFICARE BUTON CLOSE TICKET ---
+    if (interaction.isButton() && interaction.customId === 'close_ticket') {
+        const isUser = interaction.user.id === CONFIG.ALLOWED_CLOSE_ID;
+        const hasRole = interaction.member.roles.cache.has(CONFIG.ALLOWED_CLOSE_ID);
+
+        // Permite inchiderea doar daca ID-ul se potriveste cu utilizatorul sau rolul sau
+        if (!isUser && !hasRole) {
+            return interaction.reply({ content: `❌ Nu ai permisiunea sa inchizi acest ticket! Doar <@${CONFIG.ALLOWED_CLOSE_ID}> poate face asta.`, ephemeral: true });
+        }
+
+        await interaction.reply({ content: '🔒 Acest ticket se va inchide in 5 secunde...' });
+        setTimeout(() => {
+            interaction.channel.delete().catch(console.error);
+        }, 5000);
+        return;
+    }
+    
+    // --- CREARE TICKET (DIN MENIU) ---
     if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select') {
         const ticketType = interaction.values[0];
-        
-        // Răspundem rapid ca să nu mai dea "Eșuat"
         await interaction.reply({ content: '⏳ Creez ticketul...', ephemeral: true });
 
         try {
-            // Creăm canalul privat
             const channel = await interaction.guild.channels.create({
                 name: `ticket-${interaction.user.username}`,
                 type: 0,
@@ -59,19 +73,21 @@ client.on('interactionCreate', async interaction => {
                 ]
             });
 
-            // Trimitem mesajul în noul ticket
             const ticketEmbed = new EmbedBuilder()
                 .setTitle(`🎫 Ticket - ${ticketType}`)
                 .setColor(0x1ABC9C)
-                .setDescription(`Salut ${interaction.user}! Un membru staff va veni în curând să te ajute.\nMotivul ticketului: **${ticketType}**`);
+                .setDescription(`Salut ${interaction.user}! Un membru staff va veni in curand sa te ajute.\nMotivul ticketului: **${ticketType}**`);
 
-            await channel.send({ content: `<@${interaction.user.id}> | <@&${CONFIG.STAFF_ROLE_ID}>`, embeds: [ticketEmbed] });
-            
-            // Confirmăm utilizatorului
+            // Adaugam butonul rosu de Close
+            const buttonRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('close_ticket').setLabel('Închide Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒')
+            );
+
+            await channel.send({ content: `<@${interaction.user.id}> | <@&${CONFIG.STAFF_ROLE_ID}>`, embeds: [ticketEmbed], components: [buttonRow] });
             return interaction.editReply({ content: `✅ Ticket deschis cu succes: ${channel}` });
         } catch (error) {
             console.error(error);
-            return interaction.editReply({ content: '❌ Eroare la crearea ticketului. Asigură-te că botul are permisiunea "Manage Channels".' });
+            return interaction.editReply({ content: '❌ Eroare la crearea ticketului.' });
         }
     }
 
@@ -125,7 +141,6 @@ client.on('interactionCreate', async interaction => {
         const embed = new EmbedBuilder()
             .setTitle('⚔️ VisiumCommunity Support Panel')
             .setColor(0x1ABC9C)
-            // AICI AM ADĂUGAT DESCRIEREA
             .setDescription('Selectează o categorie din meniul de mai jos pentru a deschide un ticket.\nEchipa noastră te va prelua în cel mai scurt timp.')
             .setImage('https://cdn.discordapp.com/attachments/1515449144599249038/1516171455941841107/1780855051320.png');
             
@@ -134,7 +149,6 @@ client.on('interactionCreate', async interaction => {
                 .addOptions([{ label: 'Support', value: 'support', emoji: '🎒' }, { label: 'Purchase', value: 'purchase', emoji: '💸' }, { label: 'Claim Reward', value: 'claim_reward', emoji: '✅' }])
         );
         
-        // Acum botul răspunde corect comenzii, evitând eroarea
         await interaction.channel.send({ embeds: [embed], components: [row] });
         return interaction.reply({ content: '✅ Panoul a fost generat!', ephemeral: true });
     }
@@ -163,4 +177,4 @@ client.on('messageCreate', async message => {
 });
 
 client.login(process.env.TOKEN);
-                
+                                                
