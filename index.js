@@ -12,14 +12,15 @@ const client = new Client({
 
 const CONFIG = {
     SCAMMER_ROLE_ID: '1492892376979738715',
+    SUSPECT_ROLE_ID: '1492892693959938089', // ID-ul nou setat de tine pentru suspect de hack
     STAFF_ROLE_ID: '1490701828831052027',      
     TICKET_CATEGORY_ID: '1492885716856868978',
     ALLOWED_CLOSE_ID: '1485154781247967356',
-    VOUCH_CHANNEL_ID: '1517878554619150476' // Canalul de verificare extras din link-ul tau
+    VOUCH_CHANNEL_ID: '1517878554619150476'
 };
 
 const vouches = new Map();
-const pendingVouches = new Map(); // Stocam cererile de vouch aflate in asteptare
+const pendingVouches = new Map();
 
 client.once('ready', async () => {
     console.log(`Conectat ca ${client.user.tag}!`);
@@ -32,16 +33,14 @@ client.once('ready', async () => {
         { name: 'warn', description: 'Warn', options: [{ name: 'membru', type: ApplicationCommandOptionType.User, description: 'User', required: true }, { name: 'motiv', type: ApplicationCommandOptionType.String, description: 'Motiv', required: false }] },
         { name: 'kick', description: 'Kick', options: [{ name: 'membru', type: ApplicationCommandOptionType.User, description: 'User', required: true }, { name: 'motiv', type: ApplicationCommandOptionType.String, description: 'Motiv', required: false }] },
         { name: 'ban', description: 'Ban', options: [{ name: 'membru', type: ApplicationCommandOptionType.User, description: 'User', required: true }, { name: 'motiv', type: ApplicationCommandOptionType.String, description: 'Motiv', required: false }] },
-        { name: 'mark', description: 'Marcheaza scammer', options: [{ name: 'utilizator', type: ApplicationCommandOptionType.User, description: 'User', required: true }, { name: 'motiv', type: ApplicationCommandOptionType.String, description: 'Motiv', required: true }] },
-        { name: 'suspect', description: 'Alias mark', options: [{ name: 'utilizator', type: ApplicationCommandOptionType.User, description: 'User', required: true }, { name: 'motiv', type: ApplicationCommandOptionType.String, description: 'Motiv', required: true }] },
+        { name: 'mark', description: 'Marcheaza scammer, sistemul vechi', options: [{ name: 'utilizator', type: ApplicationCommandOptionType.User, description: 'User', required: true }, { name: 'motiv', type: ApplicationCommandOptionType.String, description: 'Motiv', required: true }] },
+        { name: 'suspect', description: 'Marcheaza un utilizator ca suspect de hack', options: [{ name: 'utilizator', type: ApplicationCommandOptionType.User, description: 'User', required: true }, { name: 'motiv', type: ApplicationCommandOptionType.String, description: 'Motiv', required: true }] },
         { name: 'supportpanel', description: 'Panou tickete' }
     ];
     await client.application.commands.set(commands);
 });
 
 client.on('interactionCreate', async interaction => {
-    
-    // --- CONFORMARE BUTOANE (TICKET CLOSE ȘI VERIFICARE VOUCH) ---
     if (interaction.isButton()) {
         if (interaction.customId === 'close_ticket') {
             const isUser = interaction.user.id === CONFIG.ALLOWED_CLOSE_ID;
@@ -58,7 +57,6 @@ client.on('interactionCreate', async interaction => {
             return;
         }
 
-        // Gestionarea sistemului de aprobare Vouch
         if (interaction.customId === 'vouch_accept' || interaction.customId === 'vouch_reject') {
             if (!pendingVouches.has(interaction.message.id)) {
                 return interaction.reply({ content: '❌ Această cerere de vouch a expirat sau a fost deja procesată.', ephemeral: true });
@@ -92,7 +90,6 @@ client.on('interactionCreate', async interaction => {
         }
     }
     
-    // --- CREARE TICKET PANEL ---
     if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select') {
         const ticketType = interaction.values[0];
         await interaction.reply({ content: '⏳ Creez ticketul...', ephemeral: true });
@@ -158,7 +155,7 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ content: `✅ Timeout scos pentru ${member.user.tag}.` });
     }
 
-    if (commandName === 'mark' || commandName === 'suspect') {
+    if (commandName === 'mark') {
         const user = options.getUser('utilizator');
         const reason = options.getString('motiv');
         const member = interaction.guild.members.cache.get(user.id);
@@ -168,6 +165,20 @@ client.on('interactionCreate', async interaction => {
         const embed = new EmbedBuilder()
             .setColor(0xFF0000)
             .setDescription(`# 🚨 Scammer Marcat\n## ⚠️ Utilizator marcat scammer\n\n🛑 ***Utilizator: ${user} | Motiv: ${reason}***`);
+            
+        return interaction.reply({ embeds: [embed] });
+    }
+
+    if (commandName === 'suspect') {
+        const user = options.getUser('utilizator');
+        const reason = options.getString('motiv');
+        const member = interaction.guild.members.cache.get(user.id);
+        
+        if (member) await member.roles.add(CONFIG.SUSPECT_ROLE_ID).catch(console.error);
+
+        const embed = new EmbedBuilder()
+            .setColor(0xE67E22)
+            .setDescription(`# 🚨 Suspect de Hack Marcat\n## ⚠️ Utilizator marcat suspect de hack\n\n🛑 ***Utilizator: ${user} | Motiv: ${reason}***`);
             
         return interaction.reply({ embeds: [embed] });
     }
@@ -194,8 +205,30 @@ client.on('messageCreate', async message => {
     const args = message.content.split(' ');
     const cmd = args[0].toLowerCase();
 
+    // --- MENIU HELP COMPLET ȘI CONFIGURAT CONFORM CERINȚELOR ---
     if (cmd === '+help') {
-        return message.reply('📜 **Comenzi:** `+vouch`, `+p`, `+leaderboard`');
+        const helpTemplate = 
+`# Meniu Comenzi Bot
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## Vouch System
+**+vouch <user> <comentariu>** - Trimite un vouch care așteaptă accept de la owner/admin.
+**+profile [user]** - Arată profilul cu vouch-uri.
+**+p [user]** - Alias rapid pentru profil.
+**+leaderboard** - Top utilizatori după vouch-uri acceptate.
+
+## Staff / Slash Commands
+**/supportpanel** - Trimite panel ticket cu meniu de alegere.
+**/suspect** - Marchează un utilizator ca suspect de hack.
+**/mark** - Marchează scammer, sistemul vechi.
+**/clear** - Șterge mesaje.
+
+## 📝 Exemple
+**+vouch @Baban 24€ LTC to MM**
+**+p @Baban**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+        return message.reply({ content: helpTemplate });
     }
 
     if (cmd === '+vouch') {
@@ -208,7 +241,6 @@ client.on('messageCreate', async message => {
         
         if (!vouchChannel) return message.reply('❌ Canalul configurat pentru verificarea vouch-urilor nu a fost găsit!');
 
-        // Trimitem cererea cu butoane în canalul indicat de tine
         const checkEmbed = new EmbedBuilder()
             .setTitle('📩 Verificare Vouch Nou')
             .setColor(0xF1C40F)
@@ -237,7 +269,6 @@ client.on('messageCreate', async message => {
         const target = message.mentions.users.first() || message.author;
         const userVouches = vouches.get(target.id) || [];
 
-        // Filtram vouch-urile stocate in functie de decizia luata prin butoane
         const acceptate = userVouches.filter(v => v.status === 'accepted').length;
         const refuzate = userVouches.filter(v => v.status === 'rejected').length;
         const ultimele7Zile = userVouches.filter(v => v.status === 'accepted' && Date.now() - v.date < 7 * 24 * 60 * 60 * 1000).length;
@@ -258,10 +289,6 @@ client.on('messageCreate', async message => {
 ❌ **Vouch-uri refuzate:** \`${refuzate}\`
 📈 **Ultimele 7 zile:** \`${ultimele7Zile}\`
 
-## 🎖️ Badge-uri
-⭐ Trusted
-<a:14584848207818302481:1512563633610035201> 10+ Vouches
-
 ## 💬 Ultimele comentarii:
 ${comentarii}
 
@@ -270,8 +297,38 @@ ${comentarii}
         return message.reply({ content: profilTemplate });
     }
 
+    // --- LEADERBOARD DE VOUCH-URI REALE ACCEPTATE ---
     if (cmd === '+leaderboard') {
-        return message.reply('📊 **Top Vouch-uri:** Sistemul este activ.');
+        const lbData = [];
+
+        // Adunăm numărul de vouch-uri acceptate pentru fiecare utilizator stocat
+        for (const [userId, userVouches] of vouches.entries()) {
+            const acceptedCount = userVouches.filter(v => v.status === 'accepted').length;
+            if (acceptedCount > 0) {
+                lbData.push({ userId, count: acceptedCount });
+            }
+        }
+
+        // Sortăm descrescător (de la cel mai mare număr de vouch-uri în jos)
+        lbData.sort((a, b) => b.count - a.count);
+        const top10 = lbData.slice(0, 10);
+
+        let lbTemplate = `# 📊 Leaderboard Vouch-uri Acceptate\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+        if (top10.length === 0) {
+            lbTemplate += `*Momentan nu există membri cu vouch-uri aprobate în sistem.*`;
+        } else {
+            top10.forEach((entry, idx) => {
+                let medal = '🏅';
+                if (idx === 0) medal = '🥇';
+                if (idx === 1) medal = '🥈';
+                if (idx === 2) medal = '🥉';
+                lbTemplate += `${medal} **Top ${idx + 1}:** <@${entry.userId}> — \`${entry.count}\` vouch-uri\n`;
+            });
+        }
+
+        lbTemplate += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+        return message.reply({ content: lbTemplate });
     }
 });
 
