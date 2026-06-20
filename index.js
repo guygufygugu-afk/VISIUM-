@@ -235,7 +235,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 🥷 CRIME (High risk, amenzi mari)
+    // 🥷 CRIME
     if (commandName === 'crime') {
         const cd = 45 * 60 * 1000; const last = lastCrime.get(interaction.user.id) || 0;
         if (Date.now() - last < cd) return interaction.reply({ content: `❌ Ești căutat de poliție! Poți comite o nouă crimă în <t:${Math.floor((last + cd)/1000)}:R>.`, ephemeral: true });
@@ -385,10 +385,25 @@ client.on('messageCreate', async message => {
 
     const args = message.content.split(' '); const cmd = args[0].toLowerCase();
 
-    // COMÊNZI SOCIALE (HUG, KISS, SLAP)
+    // 📚 COMANDA +HELP REINTEGRATĂ
+    if (cmd === '+help') {
+        const embed = new EmbedBuilder()
+            .setTitle('📚 Meniu Ajutor - Comenzi Visium Ultra')
+            .setColor(0x1ABC9C)
+            .setDescription('Iată comenzile pe care le poți folosi direct în chat cu prefixul `+`: Entries active.')
+            .addFields(
+                { name: '🎭 Social', value: '`+hug @user`, `+kiss @user`, `+slap @user`', inline: false },
+                { name: '❤️ Relații', value: '`+marry @user`, `+divorce`', inline: false },
+                { name: '🎰 Cazino Prefix', value: '`+v slots [sumă]`, `+v bj [sumă]`', inline: false },
+                { name: '🛡️ Utilitare & Profil', value: '`+vouch @user [comentariu]`, `+p @user` (sau `+profile`), `+leaderboard` (sau `+lb`)', inline: false }
+            );
+        return message.reply({ embeds: [embed] });
+    }
+
+    // COMÊNZI SOCIALE
     if (cmd === '+hug') {
         const target = message.mentions.users.first(); if (!target) return message.reply('❌ Menționează pe cineva pentru îmbrățișare!');
-        return message.reply(`🤗 **${message.author.username}** l-a strâns puternic în brațe pe **${target.username}**! Ce drăguț! ❤️`);
+        return message.reply(`🤗 **${message.author.username}** l-a strâns puternic în brațe pe **${target.username}**! ❤️`);
     }
     if (cmd === '+kiss') {
         const target = message.mentions.users.first(); if (!target) return message.reply('❌ Menționează persoana pe care vrei să o săruți!');
@@ -396,7 +411,7 @@ client.on('messageCreate', async message => {
     }
     if (cmd === '+slap') {
         const target = message.mentions.users.first(); if (!target) return message.reply('❌ Menționează pe cineva pentru a-i da o palmă!');
-        return message.reply(`💥 **${message.author.username}** i-a tras o palmă sonoră lui **${target.username}**! Auci! 💀`);
+        return message.reply(`💥 **${message.author.username}** i-a tras o palmă sonoră lui **${target.username}**! 💀`);
     }
 
     // RELAȚII
@@ -433,7 +448,7 @@ client.on('messageCreate', async message => {
         }
     }
 
-    if (cmd === '+vouch') {
+        if (cmd === '+vouch') {
         const target = message.mentions.users.first(); if (!target || target.id === message.author.id) return message.reply('❌ User greșit!');
         const comment = args.slice(2).join(' ') || 'Fara comentariu'; const vc = message.guild.channels.cache.get(CONFIG.VOUCH_CHANNEL_ID);
         const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('vouch_accept').setLabel('Accept').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('vouch_reject').setLabel('Reject').setStyle(ButtonStyle.Danger));
@@ -441,11 +456,38 @@ client.on('messageCreate', async message => {
         pendingVouches.set(m.id, { targetId: target.id, authorName: message.author.username, comment: comment }); return message.reply(`📩 Trimis spre verificare staff.`);
     }
 
+    // ✨ REFORMATAT ÎNAPOI ÎN EMBED PREMIUM: +P / +PROFILE
     if (cmd === '+p' || cmd === '+profile') {
-        const target = message.mentions.users.first() || message.author; const acceptate = (vouches.get(target.id) || []).filter(v => v.status === 'accepted').length;
-        return message.reply({ content: `# 👤 Profil - ${target.username}\n👛 Balanță: \`${getBalance(target.id)} Coins\`\n✅ Vouch-uri: \`${acceptate}\`\n💍 Căsătorit cu: ${marriages.has(target.id) ? `<@${marriages.get(target.id)}>` : 'Nimeni'}` });
+        const target = message.mentions.users.first() || message.author; 
+        const acceptate = (vouches.get(target.id) || []).filter(v => v.status === 'accepted').length;
+        const embed = new EmbedBuilder()
+            .setTitle(`👤 Profil Global - ${target.username}`)
+            .setColor(0x3498DB)
+            .setThumbnail(target.displayAvatarURL({ dynamic: true, size: 512 }))
+            .addFields(
+                { name: '👛 Balanță Financiară', value: `\`${getBalance(target.id)} Visium Coins\``, inline: true },
+                { name: '✅ Vouch-uri Legitime', value: `\`${acceptate} Aprobate\``, inline: true },
+                { name: '💍 Status Relație', value: marriages.has(target.id) ? `💍 Căsătorit(ă) cu <@${marriages.get(target.id)}>` : 'Un singuratic convingător', inline: false }
+            );
+        return message.reply({ embeds: [embed] });
+    }
+
+    // 🏆 COMANDA +LEADERBOARD / +LB
+    if (cmd === '+leaderboard' || cmd === '+lb') {
+        const arr = []; for (const [uid, bal] of economy.entries()) { if (bal > 0) arr.push({ uid, bal }); }
+        arr.sort((a, b) => b.bal - a.bal);
+        
+        const embed = new EmbedBuilder()
+            .setTitle('🏆 Top 10 Cei Mai Bogați Membri (Visium Economy)')
+            .setColor(0xF1C40F);
+        
+        let txt = '';
+        if (arr.length === 0) txt = '*Baza de date este goală. Nimeni nu deține monede momentan.*';
+        else arr.slice(0, 10).forEach((u, i) => { txt += `**#${i+1}** <@${u.uid}> — \`${u.bal} Coins\`\n`; });
+        
+        embed.setDescription(txt);
+        return message.reply({ embeds: [embed] });
     }
 });
 
 client.login(process.env.TOKEN);
-    
