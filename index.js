@@ -1,217 +1,146 @@
-const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ApplicationCommandOptionType, ButtonBuilder, ButtonStyle } = require('discord.js');
-const express = require('express');
-
-const app = express();
-app.get('/', (req, res) => res.send('Botul Visium Ultra-Enterprise este online și extins!'));
-app.listen(process.env.PORT || 3000);
+const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
 
 const client = new Client({
     intents: [
-        GatewayIntentBits.Guilds, 
-        GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent, 
-        GatewayIntentBits.GuildMembers, 
-        GatewayIntentBits.GuildInvites
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers
     ],
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
-// CONFIGURAȚII GENERALE ALE SERVERULUI
+// ⚙️ CONFIGURAȚIE GLOBALA (Înlocuiește ID-urile cu cele reale ale serverului tău)
 const CONFIG = {
-    OWNER_ID: '1485154781247967356', // 🏛️ ID-ul tău salvat direct! Toate taxele/amenzile vin aici.
-    SCAMMER_ROLE_ID: '1492892376979738715',
-    SUSPECT_ROLE_ID: '1492892693959938089', 
-    STAFF_ROLE_ID: '1490701828831052027',      
-    TICKET_CATEGORY_ID: '1492885716856868978',
-    ALLOWED_CLOSE_ID: '1485154781247967356',
-    VOUCH_CHANNEL_ID: '1517878554619150476',
-    
-    TRUST_ROLES: {
-        BRONZE: '1492892693959938089', 
-        SILVER: '1492892693959938089', 
-        GOLD: '1490701828831052027'
-    }
+    OWNER_ID: '123456789012345678',       // ID-ul tău de proprietar (fisc/cazinou)
+    SCAMMER_ROLE_ID: '123456789012345678', // ID-ul rolului de Scammer
+    SUSPECT_ROLE_ID: '123456789012345678',  // ID-ul rolului de Suspect
+    VOUCH_CHANNEL_ID: '123456789012345678' // ID-ul canalului unde se trimit vouch-urile în verificare
 };
 
-// BAZE DE DATA TEMPORARE ÎN MEMORIE (MAPS)
+// 💾 BAZE DE DATE ÎN MEMORIE (Maps)
+const economy = new Map();
 const vouches = new Map();
 const pendingVouches = new Map();
-const userNotes = new Map();
-const afkUsers = new Map();
-const sanctionHistory = new Map();       
-const economy = new Map();        
-const staffRatings = new Map();   
-const activeAuctions = new Map(); 
-const lastDaily = new Map();      
-const lastWork = new Map();       
-const lastCrime = new Map();      
-const lastFish = new Map();       
-const lastHunt = new Map();       
-const userInvitesCount = new Map(); 
-const guildInvites = new Map();     
 const marriages = new Map();
+const afkUsers = new Map();
+const sanctions = new Map();
+
+// Cooldowns
+const lastCrime = new Map();
+const lastFish = new Map();
+const lastHunt = new Map();
+const lastDaily = new Map();
+const lastWork = new Map();
 const activeBlackjack = new Map();
 
-// FUNCȚII AJUTĂTOARE ECONOMIE / JOCURI
-function drawCard() { 
-    const cards = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11]; 
-    return cards[Math.floor(Math.random() * cards.length)]; 
+// 🧮 FUNKȚII AJUTĂTOARE ECONOMIE & JOCURI
+function getBalance(userId) {
+    return economy.get(userId) || 0;
 }
 
-function getScore(hand) { 
-    let score = hand.reduce((a, b) => a + b, 0); 
-    let aces = hand.filter(c => c === 11).length; 
-    while (score > 21 && aces > 0) { 
-        score -= 10; 
-        aces--; 
-    } 
-    return score; 
+function addBalance(userId, amount) {
+    const curent = getBalance(userId);
+    economy.set(userId, Math.max(0, curent + amount));
 }
 
-function addSanction(userId, type, reason, executor) {
-    if (!sanctionHistory.has(userId)) sanctionHistory.set(userId, []);
-    sanctionHistory.get(userId).push({ type, reason, executor, date: Date.now() });
+function addSanction(userId, type, reason, modTag) {
+    if (!sanctions.has(userId)) sanctions.set(userId, []);
+    sanctions.get(userId).push({ type, reason, mod: modTag, date: new Date().toLocaleDateString() });
 }
 
-function getBalance(userId) { return economy.get(userId) || 0; }
-function addBalance(userId, amount) { economy.set(userId, getBalance(userId) + amount); }
+function drawCard() {
+    const cards = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
+    return cards[Math.floor(Math.random() * cards.length)];
+}
 
-// ÎNCĂRCARE INIȚIALĂ A COMMANDELOR (SLASHE-URI DETALIATE)
-client.once('ready', async () => {
-    console.log(`[🤖 VISIUM GOD-MODE] Conectat ca ${client.user.tag}! Sistemul este gata.`);
-    
-    client.guilds.cache.forEach(async guild => {
-        const firstInvites = await guild.invites.fetch().catch(() => null);
-        if (firstInvites) {
-            guildInvites.set(guild.id, new Map(firstInvites.map(invite => [invite.code, invite.uses])));
-        }
-    });
+function getScore(hand) {
+    let score = hand.reduce((a, b) => a + b, 0);
+    let aces = hand.filter(c => c === 11).length;
+    while (score > 21 && aces > 0) {
+        score -= 10;
+        aces--;
+    }
+    return score;
+}
 
-    const commands = [
-        { name: 'clear', description: 'Sterge mesaje', options: [{ name: 'cantitate', type: ApplicationCommandOptionType.Integer, description: 'Nr mesaje', required: true }] },
-        { name: 'lock', description: 'Blocheaza canalul' },
-        { name: 'unlock', description: 'Deblocheaza canalul' },
-        { name: 'timeout', description: 'Da timeout unui membru', options: [{ name: 'membru', type: ApplicationCommandOptionType.User, description: 'User', required: true }, { name: 'minute', type: ApplicationCommandOptionType.Integer, description: 'Minute', required: true }, { name: 'motiv', type: ApplicationCommandOptionType.String, description: 'Motiv', required: false }] },
-        { name: 'untimeout', description: 'Scoate timeout', options: [{ name: 'membru', type: ApplicationCommandOptionType.User, description: 'User', required: true }]},
-        { name: 'warn', description: 'Da un avertisment', options: [{ name: 'membru', type: ApplicationCommandOptionType.User, description: 'User', required: true }, { name: 'motiv', type: ApplicationCommandOptionType.String, description: 'Motiv', required: false }] },
-        { name: 'kick', description: 'Da afara un membru', options: [{ name: 'membru', type: ApplicationCommandOptionType.User, description: 'User', required: true }, { name: 'motiv', type: ApplicationCommandOptionType.String, description: 'Motiv', required: false }] },
-        { name: 'ban', description: 'Interzice un membru', options: [{ name: 'membru', type: ApplicationCommandOptionType.User, description: 'User', required: true }, { name: 'motiv', type: ApplicationCommandOptionType.String, description: 'Motiv', required: false }] },
-        { name: 'mark', description: 'Marcheaza scammer', options: [{ name: 'utilizator', type: ApplicationCommandOptionType.User, description: 'User', required: true }, { name: 'motiv', type: ApplicationCommandOptionType.String, description: 'Motiv', required: true }] },
-        { name: 'suspect', description: 'Marcheaza un utilizator ca suspect', options: [{ name: 'utilizator', type: ApplicationCommandOptionType.User, description: 'User', required: true }, { name: 'motiv', type: ApplicationCommandOptionType.String, description: 'Motiv', required: true }] },
-        { name: 'supportpanel', description: 'Panou tickete' },
-        { name: 'check', description: 'Verifica detaliile de securitate ale unui membru', options: [{ name: 'utilizator', type: ApplicationCommandOptionType.User, description: 'Membru de verificat', required: true }] },
-        { name: 'stats', description: 'Afiseaza statisticile live ale serverului' },
-        { name: 'crypto', description: 'Afiseaza pretul live al unei monede crypto', options: [{ name: 'moneda', type: ApplicationCommandOptionType.String, description: 'Ex: BTC, LTC, ETH, USDT', required: true }] },
-        { name: 'tax', description: 'Calculeaza taxele si comisioanele pentru o suma', options: [{ name: 'suma', type: ApplicationCommandOptionType.Number, description: 'Suma de bani', required: true }, { name: 'procent', type: ApplicationCommandOptionType.Number, description: 'Procentul taxei', required: true }] },
-        { name: 'note', description: 'Adauga o nota secreta pe profilul unui membru (Staff)', options: [{ name: 'utilizator', type: ApplicationCommandOptionType.User, description: 'Membru', required: true }, { name: 'text', type: ApplicationCommandOptionType.String, description: 'Nota text', required: true }] },
-        { name: 'report', description: 'Raporteaza un utilizator suspect catre staff', options: [{ name: 'utilizator', type: ApplicationCommandOptionType.User, description: 'Membru suspect', required: true }, { name: 'motiv', type: ApplicationCommandOptionType.String, description: 'De ce il raportezi?', required: true }] },
-        { name: 'afk', description: 'Te seteaza ca fiind plecat de la tastatura', options: [{ name: 'motiv', type: ApplicationCommandOptionType.String, description: 'Motivul afk', required: false }] },
-        { name: 'remind', description: 'Iti seteaza un memento personal', options: [{ name: 'minute', type: ApplicationCommandOptionType.Integer, description: 'Peste cate minute?', required: true }, { name: 'mesaj', type: ApplicationCommandOptionType.String, description: 'Textul mementoului', required: true }] },
-        { name: 'history', description: 'Afiseaza istoricul complet de sanctiuni al unui membru', options: [{ name: 'utilizator', type: ApplicationCommandOptionType.User, description: 'Membru', required: true }] },
-        { name: 'slowmode', description: 'Seteaza slowmode pe canalul curent', options: [{ name: 'secunde', type: ApplicationCommandOptionType.Integer, description: 'Secunde', required: true }] },
-        { name: 'gstart', description: 'Porneste un giveaway rapid', options: [{ name: 'minute', type: ApplicationCommandOptionType.Integer, description: 'Durata in minute', required: true }, { name: 'premiu', type: ApplicationCommandOptionType.String, description: 'Ce se castiga?', required: true }] },
-        { name: 'setwallet', description: 'Salveaza adresele tale oficiale crypto', options: [{ name: 'tip', type: ApplicationCommandOptionType.String, description: 'Moneda', required: true, choices: [{ name: 'Litecoin (LTC)', value: 'ltc' }, { name: 'Bitcoin (BTC)', value: 'btc' }, { name: 'Tether (USDT)', value: 'usdt' }] }, { name: 'adresa', type: ApplicationCommandOptionType.String, description: 'Adresa portofel', required: true }] },
-        { name: 'wallet', description: 'Vizualizeaza portofelul crypto al unui membru', options: [{ name: 'utilizator', type: ApplicationCommandOptionType.User, description: 'Membru', required: true }] },
-        { name: 'daily', description: 'Colecteaza recompensa ta zilnica de Visium Coins' },
-        { name: 'work', description: 'Lucreaza pentru a castiga monede Visium' },
-        { name: 'balance', description: 'Verifica balanta ta de monede', options: [{ name: 'utilizator', type: ApplicationCommandOptionType.User, description: 'Membru', required: false }] },
-        { name: 'coinflip', description: 'Pariaza monede la datul cu banul', options: [{ name: 'suma', type: ApplicationCommandOptionType.Integer, description: 'Suma pariu', required: true }, { name: 'alegere', type: ApplicationCommandOptionType.String, description: 'Cap sau Pajura', required: true, choices: [{ name: 'Cap', value: 'cap' }, { name: 'Pajura', value: 'pajura' }] }] },
-        { name: 'convert', description: 'Convertor valutar si crypto instant', options: [{ name: 'suma', type: ApplicationCommandOptionType.Number, description: 'Suma', required: true }, { name: 'din', type: ApplicationCommandOptionType.String, description: 'Din ce moneda', required: true }, { name: 'in', type: ApplicationCommandOptionType.String, description: 'In ce moneda', required: true }] },
-        { name: 'shop', description: 'Vizualizeaza magazinul oficial interactiv' },
-        { name: 'buy', description: 'Cumpara un articol exclusiv din shop', options: [{ name: 'articol', type: ApplicationCommandOptionType.String, description: 'Articol', required: true, choices: [{ name: 'Custom Name Color (5000 Coins)', value: 'color' }, { name: 'Vouch Badge VIP (10000 Coins)', value: 'badge' }] }] },
-        { name: 'rate', description: 'Lasa o recenzie unui membru din staff', options: [{ name: 'staff', type: ApplicationCommandOptionType.User, description: 'Staff', required: true }, { name: 'stele', type: ApplicationCommandOptionType.Integer, description: 'Stele', required: true, choices: [{ name: '⭐', value: 1 }, { name: '⭐⭐', value: 2 }, { name: '⭐⭐⭐', value: 3 }, { name: '⭐⭐⭐⭐', value: 4 }, { name: '⭐⭐⭐⭐⭐', value: 5 }] }, { name: 'comentariu', type: ApplicationCommandOptionType.String, description: 'Comentariu', required: true }] },
-        { name: 'stafflb', description: 'Afiseaza clasamentul staff' },
-        { name: 'auction', description: 'Scoate un bun la licitatie (Staff)', options: [{ name: 'obiect', type: ApplicationCommandOptionType.String, description: 'Obiect', required: true }, { name: 'pornire', type: ApplicationCommandOptionType.Integer, description: 'Pret pornire', required: true }, { name: 'minute', type: ApplicationCommandOptionType.Integer, description: 'Minute', required: true }] },
-        { name: 'bid', description: 'Pluseaza in licitatia activa', options: [{ name: 'suma', type: ApplicationCommandOptionType.Integer, description: 'Suma', required: true }] },
-        { name: 'trivia', description: 'Lanseaza o intrebare Trivia cu premii' },
-        { name: 'invites', description: 'Verifică numărul total de utilizatori reali invitați' },
-        { name: 'avatar', description: 'Arata avatarul unui utilizator', options: [{ name: 'utilizator', type: ApplicationCommandOptionType.User, description: 'Membru', required: false }] },
-        { name: 'serverinfo', description: 'Afiseaza detalii complete despre server' },
-        { name: 'userinfo', description: 'Afiseaza detalii despre un membru', options: [{ name: 'utilizator', type: ApplicationCommandOptionType.User, description: 'Membru', required: false }] },
-        { name: 'pay', description: 'Trimite Visium Coins unui prieten', options: [{ name: 'utilizator', type: ApplicationCommandOptionType.User, description: 'Cui trimiti', required: true }, { name: 'suma', type: ApplicationCommandOptionType.Integer, description: 'Suma de bani', required: true }] },
-        { name: 'rob', description: 'Incearca sa jefuiesti un alt utilizator', options: [{ name: 'utilizator', type: ApplicationCommandOptionType.User, description: 'Membru', required: true }] },
-        { name: 'dice', description: 'Da cu zarul pentru un numar norocos' },
-        { name: 'roulette', description: '🎰 Joacă la Ruleta adevărată a cazinoului!', options: [{ name: 'suma', type: ApplicationCommandOptionType.Integer, description: 'Suma de pariat', required: true }, { name: 'culoare', type: ApplicationCommandOptionType.String, description: 'Alege culoarea pe care pariezi', required: true, choices: [{ name: 'Roșu (Red - 2x)', value: 'rosu' }, { name: 'Negru (Black - 2x)', value: 'negru' }, { name: 'Verde (Green - 14x)', value: 'verde' }] }] },
-        { name: 'crime', description: '🥷 Comite o infracțiune majoră! Risc mare de amendă' },
-        { name: 'fish', description: '🎣 Mergi la pescuit pentru a prinde pești valoroși' },
-        { name: 'hunt', description: '🏹 Mergi la vânătoare în pădurea Visium' },
-        { name: 'richest', description: '🏆 Vezi topul celor mai bogați utilizatori de pe server' }
-    ];
-    await client.application.commands.set(commands);
+// 🚀 EVENIMENT: BOT READY
+client.once('ready', () => {
+    console.log(`[🤖 VISIUM BOT] Conectat ca ${client.user.tag}! Sistemul este gata.`);
 });
 
-// INTERACTION CREATE (BUTOANE, SELECTURI ȘI SLASHE-URI)
+// 🎛️ INTERACTION CREATE (SLASH COMMANDS & BUTTONS)
 client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
-        if (interaction.customId === 'close_ticket') {
-            const isUser = interaction.user.id === CONFIG.ALLOWED_CLOSE_ID;
-            if (!isUser && !interaction.member.roles.cache.has(CONFIG.STAFF_ROLE_ID)) return interaction.reply({ content: `❌ Nu ai permisiunea sa inchizi acest ticket!`, ephemeral: true });
-            await interaction.reply({ content: '🔒 Acest ticket se va inchide in 5 secunde...' });
-            setTimeout(() => { interaction.channel.delete().catch(() => {}); }, 5000);
-            return;
+        // MANAGEMENT BLACKJACK (HIT / STAND)
+        if (interaction.customId.startsWith('bj_')) {
+            const [_, action, userId] = interaction.customId.split('_');
+            if (interaction.user.id !== userId) return interaction.reply({ content: '❌ Nu este meciul tău!', ephemeral: true });
+            
+            const game = activeBlackjack.get(userId);
+            if (!game) return interaction.reply({ content: '❌ Meci expirat.', ephemeral: true });
+
+            if (action === 'hit') {
+                game.pHand.push(drawCard());
+                const pScore = getScore(game.pHand);
+                
+                if (pScore > 21) {
+                    addBalance(userId, -game.bet); addBalance(CONFIG.OWNER_ID, game.bet);
+                    activeBlackjack.delete(userId);
+                    return interaction.update({ embeds: [new EmbedBuilder().setTitle('🃏 Blackjack - Ai pierdut!').setColor(0xFF0000).setDescription(`Ai depășit 21! Scor: **${pScore}**\nAi pierdut **${game.bet} Coins**.`)], components: [] });
+                }
+                
+                const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`bj_hit_${userId}`).setLabel('Hit').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(`bj_stand_${userId}`).setLabel('Stand').setStyle(ButtonStyle.Danger));
+                return interaction.update({ embeds: [new EmbedBuilder().setTitle('🃏 Blackjack Măsuță').setColor(0x2ECC71).setDescription(`Miză: **${game.bet}**`).addFields({ name: '🫵 Scor tău', value: `Carduri: [${game.pHand.join(', ')}] (Scor: ${pScore})`, inline: true }, { name: '🤖 Dealer', value: `Card: [${game.dHand[0]}, ?]`, inline: true })], components: [row] });
+            }
+
+            if (action === 'stand') {
+                let dScore = getScore(game.dHand);
+                while (dScore < 17) {
+                    game.dHand.push(drawCard());
+                    dScore = getScore(game.dHand);
+                }
+                
+                const pScore = getScore(game.pHand);
+                activeBlackjack.delete(userId);
+                
+                let msg = '';
+                let win = false;
+                let tie = false;
+
+                if (dScore > 21 || pScore > dScore) { win = true; msg = `🎉 Ai câștigat! Dealerul are **${dScore}**, tu ai **${pScore}**. ai primit **${game.bet} Coins**!`; }
+                else if (pScore < dScore) { msg = `😭 Ai pierdut! Dealerul are **${dScore}**, tu ai **${pScore}**. Ai pierdut **${game.bet} Coins**.`; }
+                else { tie = true; msg = `👔 Egalitate! Ambii aveți **${pScore}**. Banii ți-au fost returnați.`; }
+
+                if (win) addBalance(userId, game.bet);
+                else if (!win && !tie) { addBalance(userId, -game.bet); addBalance(CONFIG.OWNER_ID, game.bet); }
+
+                return interaction.update({ embeds: [new EmbedBuilder().setTitle('🃏 Blackjack Finalizat').setColor(win ? 0x2ECC71 : (tie ? 0xF1C40F : 0xFF0000)).setDescription(msg).addFields({ name: '🫵 Mana ta', value: `[${game.pHand.join(', ')}] (Scor: ${pScore})`, inline: true }, { name: '🤖 Dealer', value: `[${game.dHand.join(', ')}] (Scor: ${dScore})`, inline: true })], components: [] });
+            }
         }
 
+        // MANAGEMENT VOUCH (STAFF ACCEPT / REJECT)
         if (interaction.customId === 'vouch_accept' || interaction.customId === 'vouch_reject') {
-            if (!pendingVouches.has(interaction.message.id)) return interaction.reply({ content: '❌ Cerere expirata.', ephemeral: true });
             const data = pendingVouches.get(interaction.message.id);
+            if (!data) return interaction.reply({ content: '❌ Datele acestui vouch nu mai există în cache.', ephemeral: true });
+
             if (interaction.customId === 'vouch_accept') {
                 if (!vouches.has(data.targetId)) vouches.set(data.targetId, []);
-                vouches.get(data.targetId).push({ author: data.authorName, comment: data.comment, date: Date.now(), status: 'accepted' });
-                const acceptedCount = vouches.get(data.targetId).filter(v => v.status === 'accepted').length;
-                await interaction.update({ content: `✅ Vouch-ul trimis de **${data.authorName}** a fost **ACCEPTAT**. Total approved: \`${acceptedCount}\`.`, embeds: [], components: [] });
+                vouches.get(data.targetId).push({ status: 'accepted', comment: data.comment, authorName: data.authorName, timestamp: data.timestamp });
+                pendingVouches.delete(interaction.message.id);
+                return interaction.update({ embeds: [new EmbedBuilder().setTitle('✅ Vouch Aprobat').setColor(0x2ECC71).setDescription(`Vouch-ul oferit de **${data.authorName}** pentru <@${data.targetId}> a fost acceptat de staff.`)], components: [] });
             } else {
-                await interaction.update({ content: `❌ Vouch-ul trimis de **${data.authorName}** a fost **RESPINS**.`, embeds: [], components: [] });
-            }
-            pendingVouches.delete(interaction.message.id); return;
-        }
-
-        // CASINO: BLACKJACK BUTTONS
-        if (interaction.customId.startsWith('bj_hit_') || interaction.customId.startsWith('bj_stand_')) {
-            const isHit = interaction.customId.startsWith('bj_hit_'); const userId = interaction.customId.replace(isHit ? 'bj_hit_' : 'bj_stand_', '');
-            if (interaction.user.id !== userId) return interaction.reply({ content: '❌ Acesta nu este jocul tău!', ephemeral: true });
-            if (!activeBlackjack.has(userId)) return interaction.reply({ content: '❌ Acest joc a expirat.', ephemeral: true });
-            const game = activeBlackjack.get(userId);
-
-            if (isHit) {
-                game.pHand.push(drawCard()); const pScore = getScore(game.pHand);
-                if (pScore > 21) {
-                    addBalance(userId, -game.bet); addBalance(CONFIG.OWNER_ID, game.bet); // 🏛️ PIERDERE -> Banii merg la tine
-                    activeBlackjack.delete(userId);
-                    return interaction.update({ embeds: [new EmbedBuilder().setTitle('💥 Blackjack - BUST!').setColor(0xFF0000).setDescription(`Ai depășit 21! Ai pierdut **${game.bet} Coins**.\nMâna ta: [${game.pHand.join(', ')}] (Scor: **${pScore}**)`)], components: [] });
-                }
-                return interaction.update({ embeds: [new EmbedBuilder().setTitle('🃏 Blackjack Table').setColor(0x2ECC71).addFields({ name: '🫵 Mâna Ta', value: `Carduri: [${game.pHand.join(', ')}]\nScor: **${pScore}**`, inline: true }, { name: '🤖 Dealer', value: `Carduri: [${game.dHand[0]}, ?]`, inline: true })] });
-            } else {
-                let dScore = getScore(game.dHand); while (dScore < 17) { game.dHand.push(drawCard()); dScore = getScore(game.dHand); }
-                const pScore = getScore(game.pHand); let msg = ''; let color = 0x34495E;
-                if (dScore > 21 || pScore > dScore) { addBalance(userId, game.bet); msg = `🎉 **Ai câștigat!** Dealerul a făcut ${dScore > 21 ? 'BUST' : dScore}. Ai primit **${game.bet} Coins**!`; color = 0x2ECC71; }
-                else if (pScore < dScore) { addBalance(userId, -game.bet); addBalance(CONFIG.OWNER_ID, game.bet); msg = `😭 **Ai pierdut!** Dealerul are **${dScore}**. Ai pierdut **${game.bet} Coins**.`; color = 0xFF0000; }
-                else { msg = `🤝 **Egalitate!** Monedele tale au fost returnate.`; color = 0xF1C40F; }
-                activeBlackjack.delete(userId);
-                return interaction.update({ embeds: [new EmbedBuilder().setTitle('🏁 Rezultat Blackjack').setColor(color).setDescription(msg).addFields({ name: '🫵 Mâna Ta', value: `Carduri: [${game.pHand.join(', ')}]\nScor: **${pScore}**`, inline: true }, { name: '🤖 Mâna Dealerului', value: `Carduri: [${game.dHand.join(', ')}]\nScor: **${dScore}**`, inline: true })], components: [] });
+                if (!vouches.has(data.targetId)) vouches.set(data.targetId, []);
+                vouches.get(data.targetId).push({ status: 'rejected', comment: data.comment, authorName: data.authorName, timestamp: data.timestamp });
+                pendingVouches.delete(interaction.message.id);
+                return interaction.update({ embeds: [new EmbedBuilder().setTitle('❌ Vouch Respins').setColor(0xFF0000).setDescription(`Vouch-ul oferit de **${data.authorName}** pentru <@${data.targetId}> a fost respins.`)], components: [] });
             }
         }
-    }
-    
-    if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select') {
-        const ticketType = interaction.values[0]; await interaction.reply({ content: '⏳ Creez ticketul...', ephemeral: true });
-        try {
-            const channel = await interaction.guild.channels.create({
-                name: `ticket-${interaction.user.username}`, type: 0, parent: CONFIG.TICKET_CATEGORY_ID,
-                permissionOverwrites: [
-                    { id: interaction.guild.id, deny: ['ViewChannel'] },
-                    { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
-                    { id: CONFIG.STAFF_ROLE_ID, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] }
-                ]
-            });
-            const embed = new EmbedBuilder().setTitle(`🎫 Ticket - ${ticketType}`).setColor(0x1ABC9C).setDescription(`Salut ${interaction.user}! Un membru staff te va ajutor în curând.\nCategorie: **${ticketType.toUpperCase()}**`);
-            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_ticket').setLabel('Închide Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒'));
-            await channel.send({ content: `<@${interaction.user.id}> | <@&${CONFIG.STAFF_ROLE_ID}>`, embeds: [embed], components: [row] });
-            return interaction.editReply({ content: `✅ Ticket deschis: ${channel}` });
-        } catch { return interaction.editReply({ content: '❌ Eroare la deschiderea ticketului.' }); }
     }
 
     if (!interaction.isChatInputCommand()) return;
-        const { commandName, options } = interaction;
+
+    const { commandName, options } = interaction;
 
     // 🎰 ROULETTE
     if (commandName === 'roulette') {
@@ -219,15 +148,11 @@ client.on('interactionCreate', async interaction => {
         if (suma <= 0) return interaction.reply({ content: '❌ Introdu o sumă pozitivă!', ephemeral: true });
         if (getBalance(interaction.user.id) < suma) return interaction.reply({ content: '❌ Bani insuficienți!', ephemeral: true });
         
-        const r = Math.random();
-        let castigatoare = '';
-        if (r < 0.47) castigatoare = 'rosu';
-        else if (r < 0.94) castigatoare = 'negru';
-        else castigatoare = 'verde';
+        const r = Math.random(); let castigatoare = '';
+        if (r < 0.47) castigatoare = 'rosu'; else if (r < 0.94) castigatoare = 'negru'; else castigatoare = 'verde';
 
         if (alegere === castigatoare) {
-            let mult = castigatoare === 'verde' ? 14 : 2;
-            const profit = suma * (mult - 1); addBalance(interaction.user.id, profit);
+            let mult = castigatoare === 'verde' ? 14 : 2; const profit = suma * (mult - 1); addBalance(interaction.user.id, profit);
             return interaction.reply(`🎰 **[RULETĂ]** Bila s-a oprit pe **${castigatoare.toUpperCase()}**! 🎉 Felicitări! Ai câștigat **${suma * mult} Coins**.`);
         } else {
             addBalance(interaction.user.id, -suma); addBalance(CONFIG.OWNER_ID, suma);
@@ -246,8 +171,7 @@ client.on('interactionCreate', async interaction => {
             const prf = Math.floor(Math.random() * 800) + 300; addBalance(interaction.user.id, prf);
             return interaction.reply(`🥷 **[CRIMĂ REUȘITĂ]** Ai spart un seif securizat și ai strâns **${prf} Visium Coins** fără să fii văzut!`);
         } else {
-            const amenda = Math.floor(Math.random() * 400) + 200; 
-            addBalance(interaction.user.id, -amenda); addBalance(CONFIG.OWNER_ID, amenda);
+            const amenda = Math.floor(Math.random() * 400) + 200; addBalance(interaction.user.id, -amenda); addBalance(CONFIG.OWNER_ID, amenda);
             return interaction.reply(`🚨 **[PRINS DE POLIȚIE]** Planul tău a eșuat mizerabil! Ai fost reținut și amendat cu **${amenda} Visium Coins**. Suma a fost retrasă automat de fisc.`);
         }
     }
@@ -258,10 +182,9 @@ client.on('interactionCreate', async interaction => {
         if (Date.now() - last < cd) return interaction.reply({ content: `❌ Peștii s-au speriat. Încearcă din nou în <t:${Math.floor((last + cd)/1000)}:R>.`, ephemeral: true });
         lastFish.set(interaction.user.id, Date.now());
         const pesti = ['🐟 Pește mic', '🐠 Pește tropical', '🐡 Pește balon', '🦈 Rechin de Aur!'];
-        const r = Math.random();
-        let idx = r < 0.5 ? 0 : (r < 0.8 ? 1 : (r < 0.97 ? 2 : 3));
+        const r = Math.random(); let idx = r < 0.5 ? 0 : (r < 0.8 ? 1 : (r < 0.97 ? 2 : 3));
         const sume = [60, 120, 250, 800]; addBalance(interaction.user.id, sume[idx]);
-        return interaction.reply(` 🎣 ${interaction.user} a aruncat undița în lac și a prins un **${pesti[idx]}** vândut instant cu **${sume[idx]} Coins**!`);
+        return interaction.reply(`🎣 ${interaction.user} a aruncat undița în lac și a prins un **${pesti[idx]}** vândut instant cu **${sume[idx]} Coins**!`);
     }
 
     // 🏹 HUNT
@@ -270,8 +193,7 @@ client.on('interactionCreate', async interaction => {
         if (Date.now() - last < cd) return interaction.reply({ content: `❌ Nu ai muniție! Mergi la vânătoare din nou în <t:${Math.floor((last + cd)/1000)}:R>.`, ephemeral: true });
         lastHunt.set(interaction.user.id, Date.now());
         const animale = ['⚰️ Nimic (ai ratat)', '🐇 Iepure sălbatic', '🐗 Porc mistreț', '🐻 Urs Brun Carpatin'];
-        const r = Math.random();
-        let idx = r < 0.3 ? 0 : (r < 0.65 ? 1 : (r < 0.92 ? 2 : 3));
+        const r = Math.random(); let idx = r < 0.3 ? 0 : (r < 0.65 ? 1 : (r < 0.92 ? 2 : 3));
         const sume = [0, 90, 200, 650]; if (sume[idx] > 0) addBalance(interaction.user.id, sume[idx]);
         return interaction.reply(`🏹 ${interaction.user} a mers în pădure cu arcul și a vânat un **${animale[idx]}** aducându-i profit de **${sume[idx]} Coins**!`);
     }
@@ -316,7 +238,7 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply(`🎲 Zaruri: **${Math.floor(Math.random() * 6) + 1}** și **${Math.floor(Math.random() * 6) + 1}**.`);
     }
     if (commandName === 'clear') {
-        const amount = options.getInteger('cantitate'); await interaction.channel.bulkDelete(amount, true); return interaction.reply({ content: `🧹 Am sters ${amount} mesaje.`, ephemeral: true });
+        const amount = options.getInteger('cantitate'); await interaction.channel.bulkDelete(amount, true); return interaction.reply({ content: `🧹 Am șters ${amount} mesaje.`, ephemeral: true });
     }
     if (commandName === 'lock') { await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false }); return interaction.reply('🔒 Canal blocat.'); }
     if (commandName === 'unlock') { await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: null }); return interaction.reply('🔓 Canal deblocat.'); }
@@ -360,22 +282,19 @@ client.on('interactionCreate', async interaction => {
         const target = options.getUser('utilizator') || interaction.user; return interaction.reply(`👛 ${target} deține: **${getBalance(target.id)} Visium Coins**.`);
     }
     if (commandName === 'coinflip') {
-        const suma = options.getInteger('suma'); const alegere = options.getString('alegere');
-        if (suma <= 0 || getBalance(interaction.user.id) < suma) return interaction.reply({ content: '❌ Sumă invalidă!', ephemeral: true });
-        const sause = Math.random() < 0.5 ? 'cap' : 'pajura';
-        if (alegere === sause) { addBalance(interaction.user.id, suma); return interaction.reply(`🎰 A picat **${sause.toUpperCase()}**! Ai câștigat \`${suma * 2}\` monede!`); }
+                if (alegere === sause) { addBalance(interaction.user.id, suma); return interaction.reply(`🎰 A picat **${sause.toUpperCase()}**! Ai câștigat \`${suma * 2}\` monede!`); }
         else { addBalance(interaction.user.id, -suma); addBalance(CONFIG.OWNER_ID, suma); return interaction.reply(`🎰 A picat **${sause.toUpperCase()}**... Ai pierdut \`${suma}\` monede.`); }
     }
 });
 
-// MESSAGE CREATE (TAG/PING RESPONSES & PREFIX COMMANDS)
+// 💬 MESSAGE CREATE (TAG RESPONSES & PREFIX COMMANDS)
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.content) return;
 
     // 🎯 RĂSPUNS INSTANT LA TAG (PING)
     if (message.mentions.has(client.user) && !message.mentions.everyone) {
         if (!message.content.startsWith('+')) {
-            return message.reply('hei,cu ce te pot ajuta?');
+            return message.reply('hei, cu ce te pot ajuta?');
         }
     }
 
@@ -385,7 +304,7 @@ client.on('messageCreate', async message => {
 
     const args = message.content.split(' '); const cmd = args[0].toLowerCase();
 
-    // 📚 COMANDA +HELP REINTEGRATĂ
+    // 📚 COMANDA +HELP
     if (cmd === '+help') {
         const embed = new EmbedBuilder()
             .setTitle('📚 Meniu Ajutor - Comenzi Visium Ultra')
@@ -400,7 +319,7 @@ client.on('messageCreate', async message => {
         return message.reply({ embeds: [embed] });
     }
 
-    // COMÊNZI SOCIALE
+    // 🎭 COMÊNZI SOCIALE
     if (cmd === '+hug') {
         const target = message.mentions.users.first(); if (!target) return message.reply('❌ Menționează pe cineva pentru îmbrățișare!');
         return message.reply(`🤗 **${message.author.username}** l-a strâns puternic în brațe pe **${target.username}**! ❤️`);
@@ -414,17 +333,17 @@ client.on('messageCreate', async message => {
         return message.reply(`💥 **${message.author.username}** i-a tras o palmă sonoră lui **${target.username}**! 💀`);
     }
 
-    // RELAȚII
+    // ❤️ RELAȚII
     if (cmd === '+marry') {
         const target = message.mentions.users.first(); if (!target || target.id === message.author.id || marriages.has(message.author.id) || marriages.has(target.id)) return message.reply('❌ Căsătorie imposibilă sau ești deja ocupat/ă!');
-        marriages.set(message.author.id, target.id); marriages.set(target.id, message.author.id); return message.reply(`💖 **Căsătorie oficială!** ${message.author} s-a căsătorit cu ${target}! 🎉`);
+        marriages.set(message.author.id, target.id); marriages.set(target.id, message.author.id); return message.reply(`💍 **Căsătorie oficială!** ${message.author} s-a căsătorit cu ${target}! 🎉`);
     }
     if (cmd === '+divorce') {
         if (!marriages.has(message.author.id)) return message.reply('❌ Nu ești căsătorit/ă!');
         const ex = marriages.get(message.author.id); marriages.delete(message.author.id); marriages.delete(ex); return message.reply(`💔 Relația dintre ${message.author} și <@${ex}> s-a destrămat.`);
     }
 
-    // CAZINO COMANDE PREFIX (+v slots / +v bj)
+    // 🎰 CAZINO PREFIX COMMANDE (+v slots / +v bj)
     if (cmd === '+v') {
         const subcmd = args[1]?.toLowerCase(); const suma = parseInt(args[2]);
         if (!subcmd || isNaN(suma) || suma <= 0 || getBalance(message.author.id) < suma) return message.reply('❌ Parametri invalizi cazinou sau bani insuficienți!');
@@ -448,41 +367,38 @@ client.on('messageCreate', async message => {
         }
     }
 
-        } // 🌟 Linia 450: Închide comanda prefix +v (blackjack/slots)
-
-    // 📩 COMANDA +VOUCH
+    // 📩 SYSTEM DE VOUCH
     if (cmd === '+vouch') {
         const target = message.mentions.users.first(); if (!target || target.id === message.author.id) return message.reply('❌ User greșit!');
         const comment = args.slice(2).join(' ') || 'Fara comentariu'; const vc = message.guild.channels.cache.get(CONFIG.VOUCH_CHANNEL_ID);
+        if (!vc) return message.reply('❌ Canalul de verificări vouch nu este configurat corect.');
+        
         const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('vouch_accept').setLabel('Accept').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('vouch_reject').setLabel('Reject').setStyle(ButtonStyle.Danger));
         const m = await vc.send({ embeds: [new EmbedBuilder().setTitle('📩 Vouch Nou').setDescription(`De la: ${message.author}\nPentru: ${target}\nComentariu: ${comment}`)], components: [row] });
         pendingVouches.set(m.id, { targetId: target.id, authorName: message.author.username, comment: comment, timestamp: Date.now() }); return message.reply(`📩 Trimis spre verificare staff.`);
     }
 
-    // 👤 COMANDA +P / +PROFILE (FORMAT TEXT PERSONALIZAT)
+    // 👤 DESIGN PREMIUM PROFIL (TEXT)
     if (cmd === '+p' || cmd === '+profile') {
         const target = message.mentions.users.first() || message.author; 
         const allVouches = vouches.get(target.id) || [];
         
-        // Calcule vouch-uri
         const acceptate = allVouches.filter(v => v.status === 'accepted').length;
         const refuzate = allVouches.filter(v => v.status === 'rejected' || v.status === 'denied').length;
         const acum7Zile = Date.now() - (7 * 24 * 60 * 60 * 1000);
         const ultimele7Zile = allVouches.filter(v => v.timestamp && v.timestamp > acum7Zile).length;
 
-        // Extragere ultimele 3 comentarii aprobate
         const ultimeleComentarii = allVouches
             .filter(v => v.status === 'accepted' && v.comment)
             .slice(-3)
             .reverse()
-            .map(v => `💬 "${v.comment}" - *de la ${v.authorName || 'Utilizator'}*`)
+            .map(v => `💬 "${v.comment}" - *de la ${v.authorName || 'Membru'}*`)
             .join('\n') || '🚫 *Niciun comentariu recent.*';
 
         const member = message.guild.members.cache.get(target.id);
         const displayName = member ? member.displayName : target.username;
 
-        // Structura exactă cerută de tine cu Emoji-uri incluse
-        const profilText = `# ${target.username} Profil Utilizator\n` +
+        const profilText = `# 👤 ${target.username} Profil Utilizator\n` +
             `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
             `**👤 User:** ${target}\n` +
             `**🆔 ID:** \`${target.id}\`\n` +
@@ -520,3 +436,4 @@ client.on('messageCreate', async message => {
 });
 
 client.login(process.env.TOKEN);
+    
