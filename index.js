@@ -448,28 +448,57 @@ client.on('messageCreate', async message => {
         }
     }
 
-        if (cmd === '+vouch') {
+        } // 🌟 Linia 450: Închide comanda prefix +v (blackjack/slots)
+
+    // 📩 COMANDA +VOUCH
+    if (cmd === '+vouch') {
         const target = message.mentions.users.first(); if (!target || target.id === message.author.id) return message.reply('❌ User greșit!');
         const comment = args.slice(2).join(' ') || 'Fara comentariu'; const vc = message.guild.channels.cache.get(CONFIG.VOUCH_CHANNEL_ID);
         const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('vouch_accept').setLabel('Accept').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('vouch_reject').setLabel('Reject').setStyle(ButtonStyle.Danger));
         const m = await vc.send({ embeds: [new EmbedBuilder().setTitle('📩 Vouch Nou').setDescription(`De la: ${message.author}\nPentru: ${target}\nComentariu: ${comment}`)], components: [row] });
-        pendingVouches.set(m.id, { targetId: target.id, authorName: message.author.username, comment: comment }); return message.reply(`📩 Trimis spre verificare staff.`);
+        pendingVouches.set(m.id, { targetId: target.id, authorName: message.author.username, comment: comment, timestamp: Date.now() }); return message.reply(`📩 Trimis spre verificare staff.`);
     }
 
-    // ✨ REFORMATAT ÎNAPOI ÎN EMBED PREMIUM: +P / +PROFILE
+    // 👤 COMANDA +P / +PROFILE (FORMAT TEXT PERSONALIZAT)
     if (cmd === '+p' || cmd === '+profile') {
         const target = message.mentions.users.first() || message.author; 
-        const acceptate = (vouches.get(target.id) || []).filter(v => v.status === 'accepted').length;
-        const embed = new EmbedBuilder()
-            .setTitle(`👤 Profil Global - ${target.username}`)
-            .setColor(0x3498DB)
-            .setThumbnail(target.displayAvatarURL({ dynamic: true, size: 512 }))
-            .addFields(
-                { name: '👛 Balanță Financiară', value: `\`${getBalance(target.id)} Visium Coins\``, inline: true },
-                { name: '✅ Vouch-uri Legitime', value: `\`${acceptate} Aprobate\``, inline: true },
-                { name: '💍 Status Relație', value: marriages.has(target.id) ? `💍 Căsătorit(ă) cu <@${marriages.get(target.id)}>` : 'Un singuratic convingător', inline: false }
-            );
-        return message.reply({ embeds: [embed] });
+        const allVouches = vouches.get(target.id) || [];
+        
+        // Calcule vouch-uri
+        const acceptate = allVouches.filter(v => v.status === 'accepted').length;
+        const refuzate = allVouches.filter(v => v.status === 'rejected' || v.status === 'denied').length;
+        const acum7Zile = Date.now() - (7 * 24 * 60 * 60 * 1000);
+        const ultimele7Zile = allVouches.filter(v => v.timestamp && v.timestamp > acum7Zile).length;
+
+        // Extragere ultimele 3 comentarii aprobate
+        const ultimeleComentarii = allVouches
+            .filter(v => v.status === 'accepted' && v.comment)
+            .slice(-3)
+            .reverse()
+            .map(v => `💬 "${v.comment}" - *de la ${v.authorName || 'Utilizator'}*`)
+            .join('\n') || '🚫 *Niciun comentariu recent.*';
+
+        const member = message.guild.members.cache.get(target.id);
+        const displayName = member ? member.displayName : target.username;
+
+        // Structura exactă cerută de tine cu Emoji-uri incluse
+        const profilText = `# ${target.username} Profil Utilizator\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `**👤 User:** ${target}\n` +
+            `**🆔 ID:** \`${target.id}\`\n` +
+            `**📛 Display Name:** \`${displayName}\`\n` +
+            `**📅 Cont creat:** <t:${Math.floor(target.createdTimestamp / 1000)}:F> (<t:${Math.floor(target.createdTimestamp / 1000)}:R>)\n` +
+            `**👛 Balanță:** \`${getBalance(target.id)} Coins\`\n` +
+            `**💍 Status Relație:** ${marriages.has(target.id) ? `💍 Căsătorit(ă) cu <@${marriages.get(target.id)}>` : 'Un singuratic convingător'}\n\n` +
+            `## 📊 Informații Vouch\n` +
+            `**✅ Vouch-uri acceptate:** \`${acceptate}\`\n` +
+            `**❌ Vouch-uri refuzate:** \`${refuzate}\`\n` +
+            `**📈 Ultimele 7 zile:** \`${ultimele7Zile}\`\n\n\n` +
+            `## 📝 Ultimele comentarii:\n` +
+            `${ultimeleComentarii}\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+        return message.reply({ content: profilText });
     }
 
     // 🏆 COMANDA +LEADERBOARD / +LB
