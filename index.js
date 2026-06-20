@@ -14,10 +14,12 @@ const CONFIG = {
     SCAMMER_ROLE_ID: '1492892376979738715',
     STAFF_ROLE_ID: '1490701828831052027',      
     TICKET_CATEGORY_ID: '1492885716856868978',
-    ALLOWED_CLOSE_ID: '1485154781247967356' // ID-ul setat de tine pentru inchidere
+    ALLOWED_CLOSE_ID: '1485154781247967356',
+    VOUCH_CHANNEL_ID: '1517878554619150476' // Canalul de verificare extras din link-ul tau
 };
 
 const vouches = new Map();
+const pendingVouches = new Map(); // Stocam cererile de vouch aflate in asteptare
 
 client.once('ready', async () => {
     console.log(`Conectat ca ${client.user.tag}!`);
@@ -39,24 +41,58 @@ client.once('ready', async () => {
 
 client.on('interactionCreate', async interaction => {
     
-    // --- VERIFICARE BUTON CLOSE TICKET ---
-    if (interaction.isButton() && interaction.customId === 'close_ticket') {
-        const isUser = interaction.user.id === CONFIG.ALLOWED_CLOSE_ID;
-        const hasRole = interaction.member.roles.cache.has(CONFIG.ALLOWED_CLOSE_ID);
+    // --- CONFORMARE BUTOANE (TICKET CLOSE ȘI VERIFICARE VOUCH) ---
+    if (interaction.isButton()) {
+        if (interaction.customId === 'close_ticket') {
+            const isUser = interaction.user.id === CONFIG.ALLOWED_CLOSE_ID;
+            const hasRole = interaction.member.roles.cache.has(CONFIG.ALLOWED_CLOSE_ID);
 
-        // Permite inchiderea doar daca ID-ul se potriveste cu utilizatorul sau rolul sau
-        if (!isUser && !hasRole) {
-            return interaction.reply({ content: `❌ Nu ai permisiunea sa inchizi acest ticket! Doar <@${CONFIG.ALLOWED_CLOSE_ID}> poate face asta.`, ephemeral: true });
+            if (!isUser && !hasRole) {
+                return interaction.reply({ content: `❌ Nu ai permisiunea sa inchizi acest ticket! Doar <@${CONFIG.ALLOWED_CLOSE_ID}> poate face asta.`, ephemeral: true });
+            }
+
+            await interaction.reply({ content: '🔒 Acest ticket se va inchide in 5 secunde...' });
+            setTimeout(() => {
+                interaction.channel.delete().catch(console.error);
+            }, 5000);
+            return;
         }
 
-        await interaction.reply({ content: '🔒 Acest ticket se va inchide in 5 secunde...' });
-        setTimeout(() => {
-            interaction.channel.delete().catch(console.error);
-        }, 5000);
-        return;
+        // Gestionarea sistemului de aprobare Vouch
+        if (interaction.customId === 'vouch_accept' || interaction.customId === 'vouch_reject') {
+            if (!pendingVouches.has(interaction.message.id)) {
+                return interaction.reply({ content: '❌ Această cerere de vouch a expirat sau a fost deja procesată.', ephemeral: true });
+            }
+
+            const data = pendingVouches.get(interaction.message.id);
+            const targetUser = await client.users.fetch(data.targetId).catch(() => null);
+
+            if (interaction.customId === 'vouch_accept') {
+                if (!vouches.has(data.targetId)) vouches.set(data.targetId, []);
+                vouches.get(data.targetId).push({ author: data.authorName, comment: data.comment, date: Date.now(), status: 'accepted' });
+
+                await interaction.update({
+                    content: `✅ Vouch-ul trimis de **${data.authorName}** pentru ${targetUser || `\`${data.targetId}\``} a fost **ACCEPTAT** de către ${interaction.user}.`,
+                    embeds: [],
+                    components: []
+                });
+            } else {
+                if (!vouches.has(data.targetId)) vouches.set(data.targetId, []);
+                vouches.get(data.targetId).push({ author: data.authorName, comment: data.comment, date: Date.now(), status: 'rejected' });
+
+                await interaction.update({
+                    content: `❌ Vouch-ul trimis de **${data.authorName}** pentru ${targetUser || `\`${data.targetId}\``} a fost **RESPINS** de către ${interaction.user}.`,
+                    embeds: [],
+                    components: []
+                });
+            }
+            
+            pendingVouches.delete(interaction.message.id);
+            return;
+        }
     }
     
-    // --- CREARE TICKET (DIN MENIU) ---
+    // --- CREARE TICKET PANEL ---
     if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select') {
         const ticketType = interaction.values[0];
         await interaction.reply({ content: '⏳ Creez ticketul...', ephemeral: true });
@@ -78,7 +114,6 @@ client.on('interactionCreate', async interaction => {
                 .setColor(0x1ABC9C)
                 .setDescription(`Salut ${interaction.user}! Un membru staff va veni in curand sa te ajute.\nMotivul ticketului: **${ticketType}**`);
 
-            // Adaugam butonul rosu de Close
             const buttonRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('close_ticket').setLabel('Închide Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒')
             );
@@ -162,19 +197,83 @@ client.on('messageCreate', async message => {
     if (cmd === '+help') {
         return message.reply('📜 **Comenzi:** `+vouch`, `+p`, `+leaderboard`');
     }
+
     if (cmd === '+vouch') {
         const target = message.mentions.users.first();
         if (!target) return message.reply('❌ Specifica un user!');
-        if (!vouches.has(target.id)) vouches.set(target.id, []);
-        vouches.get(target.id).push({ author: message.author.tag });
-        return message.reply(`✅ Vouch adaugat pentru ${target.tag}!`);
+        if (target.id === message.author.id) return message.reply('❌ Nu iti poti da singur vouch!');
+
+        const comment = args.slice(2).join(' ') || 'Fara comentariu';
+        const vouchChannel = message.guild.channels.cache.get(CONFIG.VOUCH_CHANNEL_ID);
+        
+        if (!vouchChannel) return message.reply('❌ Canalul configurat pentru verificarea vouch-urilor nu a fost găsit!');
+
+        // Trimitem cererea cu butoane în canalul indicat de tine
+        const checkEmbed = new EmbedBuilder()
+            .setTitle('📩 Verificare Vouch Nou')
+            .setColor(0xF1C40F)
+            .setDescription(`👤 **De la:** ${message.author} (\`${message.author.username}\`)\n🎯 **Pentru:** ${target}\n💬 **Comentariu:** ${comment}`)
+            .setTimestamp();
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('vouch_accept').setLabel('Vouch Acceptat').setStyle(ButtonStyle.Success).setEmoji('✅'),
+            new ButtonBuilder().setCustomId('vouch_reject').setLabel('Vouch Respins').setStyle(ButtonStyle.Danger).setEmoji('❌')
+        );
+
+        const sentMsg = await vouchChannel.send({ embeds: [checkEmbed], components: [row] }).catch(console.error);
+        
+        if (sentMsg) {
+            pendingVouches.set(sentMsg.id, {
+                targetId: target.id,
+                authorName: message.author.username,
+                comment: comment
+            });
+        }
+
+        return message.reply(`📩 Vouch-ul tău pentru **${target.username}** a fost trimis spre confirmare în <#${CONFIG.VOUCH_CHANNEL_ID}>!`);
     }
+
     if (cmd === '+p' || cmd === '+profile') {
         const target = message.mentions.users.first() || message.author;
-        const count = vouches.get(target.id)?.length || 0;
-        return message.reply(`👤 **Profil Vouch - ${target.username}** | Total: ${count}`);
+        const userVouches = vouches.get(target.id) || [];
+
+        // Filtram vouch-urile stocate in functie de decizia luata prin butoane
+        const acceptate = userVouches.filter(v => v.status === 'accepted').length;
+        const refuzate = userVouches.filter(v => v.status === 'rejected').length;
+        const ultimele7Zile = userVouches.filter(v => v.status === 'accepted' && Date.now() - v.date < 7 * 24 * 60 * 60 * 1000).length;
+
+        const comentarii = userVouches.filter(v => v.status === 'accepted').slice(-3).map(v => `💬 **${v.author}**: *${v.comment}*`).join('\n') || '*Niciun comentariu lăsat.*';
+
+        const profilTemplate = 
+`# 👤 (${target.username}) Profil Utilizator
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+👤 **User:** ${target}
+🆔 **ID:** \`${target.id}\`
+🏷️ **Display Name:** **${target.displayName || target.username}**
+📅 **Cont creat:** <t:${Math.floor(target.createdTimestamp / 1000)}:F>
+
+## 📊 Informații Vouch
+✅ **Vouch-uri acceptate:** \`${acceptate}\`
+❌ **Vouch-uri refuzate:** \`${refuzate}\`
+📈 **Ultimele 7 zile:** \`${ultimele7Zile}\`
+
+## 🎖️ Badge-uri
+⭐ Trusted
+<a:14584848207818302481:1512563633610035201> 10+ Vouches
+
+## 💬 Ultimele comentarii:
+${comentarii}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+        return message.reply({ content: profilTemplate });
+    }
+
+    if (cmd === '+leaderboard') {
+        return message.reply('📊 **Top Vouch-uri:** Sistemul este activ.');
     }
 });
 
 client.login(process.env.TOKEN);
-                                                
+        
