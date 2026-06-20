@@ -25,11 +25,7 @@ function addSanction(userId, type, reason, modTag) {
     sanctions.get(userId).push({ type, reason, mod: modTag, date: new Date().toLocaleDateString() });
 }
 
-client.once('ready', () => {
-    console.log(`[VISIUM BOT] Conectat! Totul este organizat.`);
-});
-
-// --- SLASH COMMANDS (Interaction) ---
+// --- SLASH COMMANDS ---
 client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
         const data = pendingVouches.get(interaction.message.id);
@@ -50,7 +46,6 @@ client.on('interactionCreate', async interaction => {
 
     const { commandName, options } = interaction;
 
-    // --- MODERAȚIE & ADMIN (Slash) ---
     if (commandName === 'warn') {
         const target = options.getMember('utilizator');
         addSanction(target.id, 'WARN', options.getString('motiv') || 'Fără motiv', interaction.user.tag);
@@ -108,32 +103,28 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// --- PREFIX COMMANDS (Message) ---
+// --- PREFIX COMMANDS ---
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.content.startsWith('+')) return;
 
     const args = message.content.split(' '); 
     const cmd = args[0].toLowerCase();
 
-    // HELP MENU
     if (cmd === '+help') {
         const helpEmbed = new EmbedBuilder()
             .setTitle('🤖 Meniu Comenzi Bot')
             .setColor(0x3498DB)
             .setDescription(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
             `## 📩 Vouch System\n` +
-            `**+vouch <user> <comentariu>** - Trimite un vouch care așteaptă accept de la owner/admin.\n` +
+            `**+vouch <user> <comentariu>** - Trimite un vouch.\n` +
             `**+profile [user]** - Arată profilul cu vouch-uri.\n` +
             `**+p [user]** - Alias rapid pentru profil.\n` +
-            `**+leaderboard** - Top utilizatori după vouch-uri acceptate.\n\n` +
+            `**+leaderboard** - Top utilizatori după vouch-uri.\n\n` +
             `## 🛡️ Staff / Slash Commands\n` +
-            `**/supportpanel** - Trimite panel ticket cu meniu de alegere.\n` +
-            `**/suspect** - Marchează un utilizator ca suspect de hack.\n` +
-            `**/mark** - Marchează scammer, sistemul vechi.\n` +
-            `**/clear** - Șterge mesaj\n\n` +
-            `## 💡 Exemple\n` +
-            `**+vouch @Baban 24€ LTC to MM**\n` +
-            `**+p @Baban**\n\n` +
+            `**/supportpanel** - Panel tichete.\n` +
+            `**/suspect** - Marchează suspect.\n` +
+            `**/mark** - Marchează scammer.\n` +
+            `**/clear** - Șterge mesaje.\n\n` +
             `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
         return message.reply({ embeds: [helpEmbed] });
     }
@@ -158,7 +149,8 @@ client.on('messageCreate', async message => {
         const allVouches = vouches.get(target.id) || [];
         const acceptate = allVouches.filter(v => v.status === 'accepted').length;
         const refuzate = allVouches.filter(v => v.status === 'rejected').length;
-        return message.reply(`👤 **Profil: ${target.username}**\n✅ Vouch-uri: \`${acceptate}\` | ❌ Respinse: \`${refuzate}\``);
+        
+        return message.reply({ embeds: [new EmbedBuilder().setTitle(`👤 Profil: ${target.username}`).setColor(0x3498DB).setDescription(`✅ Vouch-uri aprobate: \`${acceptate}\`\n❌ Vouch-uri respinse: \`${refuzate}\``)] });
     }
 
     if (cmd === '+leaderboard' || cmd === '+lb') {
@@ -168,11 +160,14 @@ client.on('messageCreate', async message => {
             if (count > 0) arr.push({ uid, count });
         }
         arr.sort((a, b) => b.count - a.count);
-        let txt = `# 🏆 Top Vouch-uri\n`;
-        arr.slice(0, 10).forEach((u, i) => { txt += `**#${i+1}** <@${u.uid}> - \`${u.count}\` vouch-uri\n`; });
-        return message.reply(txt || 'Nu există vouch-uri încă.');
+        
+        let txt = `# 🏆 Top 10 Vouch-uri\n`;
+        if (arr.length === 0) txt += `Nu există vouch-uri înregistrate momentan.`;
+        else arr.slice(0, 10).forEach((u, i) => { txt += `**#${i+1}** <@${u.uid}> - \`${u.count}\` vouch-uri\n`; });
+        
+        return message.reply(txt);
     }
 });
 
 client.login(process.env.TOKEN);
-        
+    
