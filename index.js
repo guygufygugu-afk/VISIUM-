@@ -116,7 +116,6 @@ client.on('interactionCreate', async interaction => {
 
         // --- D. Aprobare/Respingere Sugestie ---
         if (interaction.customId.startsWith('sug_accept_') || interaction.customId.startsWith('sug_reject_')) {
-            // Verificăm dacă cel care dă click are rol de staff
             if (!interaction.member.roles.cache.has(CONFIG.STAFF_ROLE_ID) && interaction.user.id !== CONFIG.OWNER_ID) {
                 return interaction.reply({ content: '❌ Doar staff-ul poate folosi aceste butoane.', ephemeral: true });
             }
@@ -206,6 +205,11 @@ client.on('interactionCreate', async interaction => {
     // ================= 4. SLASH COMMANDS =================
     if (!interaction.isChatInputCommand()) return;
     const { commandName, options } = interaction;
+
+    // 🔒 SCUT DE SECURITATE GLOBAL: Oprește membrii simpli din a folosi comenzile slash ale botului
+    if (!interaction.member.roles.cache.has(CONFIG.STAFF_ROLE_ID) && interaction.user.id !== CONFIG.OWNER_ID) {
+        return interaction.reply({ content: '❌ Nu ai permisiunea de a folosi comenzile administrative ale acestui bot!', ephemeral: true });
+    }
 
     if (commandName === 'supportpanel') {
         const embed = new EmbedBuilder()
@@ -320,7 +324,7 @@ client.on('messageCreate', async message => {
         const helpEmbed = new EmbedBuilder()
             .setTitle('🤖 Meniu Comenzi Bot')
             .setColor(0x3498DB)
-            .setDescription(`## 📩 Vouch System\n**+vouch <user> <comentariu>**\n**+profile [user]**\n**+leaderboard**\n\n## 🛡️ Slash Commands (Folosește /)\n**/supportpanel** - Panou Tichete\n**/suggestionpanel** - Panou Sugestii\n**/warn, /kick, /ban, /timeout, /untimeout, /lock, /unlock, /clear, /suspect, /mark**`);
+            .setDescription(`## 📩 Vouch System\n**+vouch <user> <comentariu>**\n**+profile [user]**\n**+leaderboard**\n\n## 🛡️ Slash Commands (Doar Staff/Owner)\n**/supportpanel** - Panou Tichete\n**/suggestionpanel** - Panou Sugestii\n**/warn, /kick, /ban, /timeout, /untimeout, /lock, /unlock, /clear, /suspect, /mark**`);
         return message.reply({ embeds: [helpEmbed] });
     }
 
@@ -371,4 +375,4 @@ client.on('messageCreate', async message => {
 });
 
 client.login(process.env.TOKEN);
-        
+                
