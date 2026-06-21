@@ -38,16 +38,36 @@ function addSanction(userId, type, reason, modTag) {
     sanctions.get(userId).push({ type, reason, mod: modTag, date: new Date().toLocaleDateString() });
 }
 
-client.once('ready', () => {
-    console.log(`[VISIUM BOT] Conectat! Totul este organizat.`);
+// --- ÎNREGISTRARE AUTOMATĂ SLASH COMMANDS LA PORNIRE ---
+client.once('ready', async () => {
+    console.log(`[VISIUM BOT] Conectat! Înregistrez comenzile...`);
+    
+    const slashCommands = [
+        { name: 'supportpanel', description: 'Creează panoul de suport (Tichete)' },
+        { name: 'suggestionpanel', description: 'Creează panoul pentru sugestii' },
+        { name: 'warn', description: 'Avertizează un utilizator', options: [{ name: 'utilizator', type: 6, description: 'Userul sancționat', required: true }, { name: 'motiv', type: 3, description: 'Motivul', required: false }] },
+        { name: 'kick', description: 'Dă afară un utilizator', options: [{ name: 'utilizator', type: 6, description: 'Userul vizat', required: true }] },
+        { name: 'ban', description: 'Banează un utilizator', options: [{ name: 'utilizator', type: 6, description: 'Userul vizat', required: true }] },
+        { name: 'timeout', description: 'Dă timeout unui utilizator', options: [{ name: 'utilizator', type: 6, description: 'Userul vizat', required: true }, { name: 'minute', type: 4, description: 'Timp în minute', required: true }, { name: 'motiv', type: 3, description: 'Motivul', required: false }] },
+        { name: 'untimeout', description: 'Scoate timeout-ul', options: [{ name: 'utilizator', type: 6, description: 'Userul vizat', required: true }] },
+        { name: 'lock', description: 'Blochează canalul curent' },
+        { name: 'unlock', description: 'Deblochează canalul curent' },
+        { name: 'clear', description: 'Șterge mesaje', options: [{ name: 'cantitate', type: 4, description: 'Numărul de mesaje', required: true }] },
+        { name: 'suspect', description: 'Oferă rolul Suspect', options: [{ name: 'utilizator', type: 6, description: 'Userul vizat', required: true }] },
+        { name: 'mark', description: 'Oferă rolul Scammer', options: [{ name: 'utilizator', type: 6, description: 'Userul vizat', required: true }] }
+    ];
+
+    await client.application.commands.set(slashCommands);
+    console.log(`[VISIUM BOT] Comenzile slash au fost încărcate cu succes!`);
 });
 
-// --- INTERACTION HANDLER ---
+// --- INTERACTION HANDLER (Butoane, Modal, SelectMenu, Slash) ---
 client.on('interactionCreate', async interaction => {
+    
     // ================= 1. BUTOANE =================
     if (interaction.isButton()) {
         
-        // --- A. Logica Vouch ---
+        // --- A. Vouch ---
         if (interaction.customId === 'vouch_accept' || interaction.customId === 'vouch_reject') {
             const data = pendingVouches.get(interaction.message.id);
             if (!data) return interaction.reply({ content: '❌ Eroare: Vouch-ul nu mai există.', ephemeral: true });
@@ -63,7 +83,7 @@ client.on('interactionCreate', async interaction => {
             }
         }
 
-        // --- B. Logica Închidere Tichet ---
+        // --- B. Închidere Tichet ---
         if (interaction.customId === 'ticket_close') {
             if (interaction.user.id !== CONFIG.OWNER_ID) {
                 return interaction.reply({ content: '❌ Doar proprietarul botului poate închide tichetele!', ephemeral: true });
@@ -72,7 +92,7 @@ client.on('interactionCreate', async interaction => {
             setTimeout(() => interaction.channel.delete().catch(console.error), 3000);
         }
 
-        // --- C. Deschidere Modal Sugestii ---
+        // --- C. Modal Sugestii ---
         if (interaction.customId === 'open_suggestion_modal') {
             const modal = new ModalBuilder()
                 .setCustomId('suggestion_modal')
@@ -94,8 +114,13 @@ client.on('interactionCreate', async interaction => {
             return interaction.showModal(modal);
         }
 
-        // --- D. Aprobare / Respingere Sugestie (Staff) ---
+        // --- D. Aprobare/Respingere Sugestie ---
         if (interaction.customId.startsWith('sug_accept_') || interaction.customId.startsWith('sug_reject_')) {
+            // Verificăm dacă cel care dă click are rol de staff
+            if (!interaction.member.roles.cache.has(CONFIG.STAFF_ROLE_ID) && interaction.user.id !== CONFIG.OWNER_ID) {
+                return interaction.reply({ content: '❌ Doar staff-ul poate folosi aceste butoane.', ephemeral: true });
+            }
+
             const isAccept = interaction.customId.startsWith('sug_accept_');
             const userId = interaction.customId.split('_')[2];
             const originalEmbed = interaction.message.embeds[0];
@@ -109,7 +134,7 @@ client.on('interactionCreate', async interaction => {
                 
                 await user.send({ embeds: [dmEmbed] }).catch(() => {});
             } catch (e) {
-                console.error(e);
+                console.error('Nu am putut trimite DM.');
             }
 
             const updatedEmbed = EmbedBuilder.from(originalEmbed)
@@ -149,34 +174,33 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // ================= 3. CREARE TICHET =================
-    if (interaction.isStringSelectMenu()) {
-        if (interaction.customId === 'ticket_select') {
-            await interaction.deferReply({ ephemeral: true });
+    // ================= 3. MENIU TICHETE =================
+    if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select') {
+        await interaction.deferReply({ ephemeral: true });
 
-            const ticketType = interaction.values[0];
-            const channel = await interaction.guild.channels.create({
-                name: `ticket-${interaction.user.username}-${ticketType}`,
-                type: ChannelType.GuildText,
-                parent: CONFIG.TICKET_CATEGORY_ID, 
-                permissionOverwrites: [
-                    { id: interaction.guild.id, deny: ['ViewChannel'] }, 
-                    { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
-                    { id: interaction.client.user.id, allow: ['ViewChannel', 'SendMessages'] }
-                ],
-            });
+        const ticketType = interaction.values[0];
+        const channel = await interaction.guild.channels.create({
+            name: `ticket-${interaction.user.username}-${ticketType}`,
+            type: ChannelType.GuildText,
+            parent: CONFIG.TICKET_CATEGORY_ID, 
+            permissionOverwrites: [
+                { id: interaction.guild.id, deny: ['ViewChannel'] }, 
+                { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
+                { id: interaction.client.user.id, allow: ['ViewChannel', 'SendMessages'] },
+                { id: CONFIG.STAFF_ROLE_ID, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] }
+            ],
+        });
 
-            const rowClose = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('ticket_close').setLabel('Închide Tichet').setStyle(ButtonStyle.Danger)
-            );
+        const rowClose = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('ticket_close').setLabel('Închide Tichet').setStyle(ButtonStyle.Danger)
+        );
 
-            await channel.send({ 
-                content: `<@&${CONFIG.STAFF_ROLE_ID}>, tichet nou deschis de ${interaction.user} (Tip: ${ticketType}).`, 
-                components: [rowClose] 
-            });
+        await channel.send({ 
+            content: `<@&${CONFIG.STAFF_ROLE_ID}>, tichet nou deschis de ${interaction.user} (Tip: ${ticketType}).`, 
+            components: [rowClose] 
+        });
 
-            await interaction.editReply({ content: `✅ Tichetul tău a fost creat: ${channel}` });
-        }
+        await interaction.editReply({ content: `✅ Tichetul tău a fost creat: ${channel}` });
     }
 
     // ================= 4. SLASH COMMANDS =================
@@ -233,7 +257,7 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply({ content: '✅ Panou sugestii creat.', ephemeral: true });
     }
 
-    // Comenzi moderație
+    // --- COMENZI MODERAȚIE ---
     if (commandName === 'warn') {
         const target = options.getMember('utilizator');
         addSanction(target.id, 'WARN', options.getString('motiv') || 'Fără motiv', interaction.user.tag);
@@ -285,7 +309,7 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// ================= PREFIX COMMANDS =================
+// ================= 5. PREFIX COMMANDS (+vouch, +p) =================
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.content.startsWith('+')) return;
 
@@ -296,7 +320,7 @@ client.on('messageCreate', async message => {
         const helpEmbed = new EmbedBuilder()
             .setTitle('🤖 Meniu Comenzi Bot')
             .setColor(0x3498DB)
-            .setDescription(`## 📩 Vouch System\n**+vouch <user> <comentariu>**\n**+profile [user]**\n**+leaderboard**\n\n## 🛡️ Slash Commands\n**/supportpanel**, **/suggestionpanel**, **/warn**, **/kick**, **/ban**, **/timeout**, **/untimeout**, **/lock**, **/unlock**, **/clear**, **/suspect**, **/mark**`);
+            .setDescription(`## 📩 Vouch System\n**+vouch <user> <comentariu>**\n**+profile [user]**\n**+leaderboard**\n\n## 🛡️ Slash Commands (Folosește /)\n**/supportpanel** - Panou Tichete\n**/suggestionpanel** - Panou Sugestii\n**/warn, /kick, /ban, /timeout, /untimeout, /lock, /unlock, /clear, /suspect, /mark**`);
         return message.reply({ embeds: [helpEmbed] });
     }
 
@@ -309,7 +333,7 @@ client.on('messageCreate', async message => {
         if (!comment) return message.reply('📝 Scrie și comentariul vouch-ului.');
 
         const vc = message.guild.channels.cache.get(CONFIG.VOUCH_CHANNEL_ID);
-        if (!vc) return message.reply('❌ Canalul de vouch-uri nu a fost setat.');
+        if (!vc) return message.reply('❌ Canalul de vouch-uri nu a fost setat corect.');
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('vouch_accept').setLabel('Accept').setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId('vouch_reject').setLabel('Reject').setStyle(ButtonStyle.Danger)
@@ -347,4 +371,4 @@ client.on('messageCreate', async message => {
 });
 
 client.login(process.env.TOKEN);
-                                           
+        
