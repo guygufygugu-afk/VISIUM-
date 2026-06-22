@@ -18,6 +18,9 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
+// SIGURANȚĂ ANTI-CRASH: Previne oprirea botului la erori de conexiune sau latență API
+client.on('error', error => console.error('[VISIUM ERRORE CLIENT]', error));
+
 const CONFIG = {
     SCAMMER_ROLE_ID: '1492892376979738715', 
     SUSPECT_ROLE_ID: '1492892693959938089',  
@@ -175,7 +178,13 @@ client.on('interactionCreate', async interaction => {
 
     // ================= 3. MENIU TICHETE =================
     if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select') {
-        await interaction.deferReply({ flags: 64 });
+        // Se încearcă deferReply, iar dacă interacțiunea a expirat din cauza latenței Render, eroarea este prinsă în siguranță
+        try {
+            await interaction.deferReply({ flags: 64 });
+        } catch (error) {
+            console.error('[VISIUM WARNING] Interacțiunea select-menu a expirat (Render Slow-Wakeup):', error.message);
+            return; 
+        }
 
         const ticketType = interaction.values[0];
         const channel = await interaction.guild.channels.create({
@@ -212,7 +221,7 @@ client.on('interactionCreate', async interaction => {
             .setColor(0x5865F2)
             .setDescription(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
                 `🎫 **Ai nevoie de ajutor? Deschide un ticket de support.**\n` +
-                `👋 **Pentru cumpărare, apasă Purchase. Fără alte opțiuni.**\n` +
+                `👋 **Pentru cumpărare, apasat Purchase. Fără alte opțiuni.**\n` +
                 `✅ **Ai de revendicat un reward? Deschide Claim Reward.**\n\n` +
                 `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
@@ -364,16 +373,15 @@ client.on('messageCreate', async message => {
     if (cmd === '+leaderboard' || cmd === '+lb') {
         let arr = [];
         for (const [uid, list] of vouches.entries()) {
-            const count = list.filter(v => v.status === 'accepted').length;
-            if (count > 0) arr.push({ uid, count });
+                            const count = list.filter(v => v.status === 'accepted').length;
+                if (count > 0) arr.push({ uid, count });
+            }
+            arr.sort((a, b) => b.count - a.count);
+            let txt = `# 🏆 Top 10 Vouch-uri\n`;
+            if (arr.length === 0) txt += `Niciun vouch încă.`;
+            else arr.slice(0, 10).forEach((u, i) => { txt += `**#${i+1}** <@${u.uid}> - \`${u.count}\` vouch-uri\n`; });
+            return message.reply(txt);
         }
-        arr.sort((a, b) => b.count - a.count);
-        let txt = `# 🏆 Top 10 Vouch-uri\n`;
-        if (arr.length === 0) txt += `Niciun vouch încă.`;
-        else arr.slice(0, 10).forEach((u, i) => { txt += `**#${i+1}** <@${u.uid}> - \`${u.count}\` vouch-uri\n`; });
-        return message.reply(txt);
-    }
-});
+    });
 
-client.login(process.env.TOKEN);
-                
+    client.login(process.env.TOKEN);
