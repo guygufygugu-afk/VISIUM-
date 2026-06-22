@@ -70,7 +70,7 @@ client.on('interactionCreate', async interaction => {
         // --- A. Vouch ---
         if (interaction.customId === 'vouch_accept' || interaction.customId === 'vouch_reject') {
             const data = pendingVouches.get(interaction.message.id);
-            if (!data) return interaction.reply({ content: '❌ Eroare: Vouch-ul nu mai există.', ephemeral: true });
+            if (!data) return interaction.reply({ content: '❌ Eroare: Vouch-ul nu mai există.', flags: 64 });
 
             if (interaction.customId === 'vouch_accept') {
                 if (!vouches.has(data.targetId)) vouches.set(data.targetId, []);
@@ -86,7 +86,7 @@ client.on('interactionCreate', async interaction => {
         // --- B. Închidere Tichet ---
         if (interaction.customId === 'ticket_close') {
             if (interaction.user.id !== CONFIG.OWNER_ID) {
-                return interaction.reply({ content: '❌ Doar proprietarul botului poate închide tichetele!', ephemeral: true });
+                return interaction.reply({ content: '❌ Doar proprietarul botului poate închide tichetele!', flags: 64 });
             }
             await interaction.reply('🔒 Canalul se închide în 3 secunde...');
             setTimeout(() => interaction.channel.delete().catch(console.error), 3000);
@@ -117,7 +117,7 @@ client.on('interactionCreate', async interaction => {
         // --- D. Aprobare/Respingere Sugestie ---
         if (interaction.customId.startsWith('sug_accept_') || interaction.customId.startsWith('sug_reject_')) {
             if (!interaction.member.roles.cache.has(CONFIG.STAFF_ROLE_ID) && interaction.user.id !== CONFIG.OWNER_ID) {
-                return interaction.reply({ content: '❌ Doar staff-ul poate folosi aceste butoane.', ephemeral: true });
+                return interaction.reply({ content: '❌ Doar staff-ul poate folosi aceste butoane.', flags: 64 });
             }
 
             const isAccept = interaction.customId.startsWith('sug_accept_');
@@ -151,7 +151,7 @@ client.on('interactionCreate', async interaction => {
             const motiv = interaction.fields.getTextInputValue('sugestie_motiv');
 
             const channel = interaction.client.channels.cache.get(CONFIG.SUGGESTION_CHANNEL_ID);
-            if (!channel) return interaction.reply({ content: '❌ Eroare: Canalul de sugestii nu a fost găsit.', ephemeral: true });
+            if (!channel) return interaction.reply({ content: '❌ Eroare: Canalul de sugestii nu a fost găsit.', flags: 64 });
 
             const embed = new EmbedBuilder()
                 .setTitle('💡 O nouă sugestie')
@@ -169,13 +169,13 @@ client.on('interactionCreate', async interaction => {
             );
 
             await channel.send({ embeds: [embed], components: [row] });
-            await interaction.reply({ content: '✅ Sugestia ta a fost trimisă cu succes către staff!', ephemeral: true });
+            await interaction.reply({ content: '✅ Sugestia ta a fost trimisă cu succes către staff!', flags: 64 });
         }
     }
 
     // ================= 3. MENIU TICHETE =================
     if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select') {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64 });
 
         const ticketType = interaction.values[0];
         const channel = await interaction.guild.channels.create({
@@ -206,11 +206,6 @@ client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     const { commandName, options } = interaction;
 
-    // 🔒 SCUT DE SECURITATE GLOBAL: Oprește membrii simpli din a folosi comenzile slash ale botului
-    if (!interaction.member.roles.cache.has(CONFIG.STAFF_ROLE_ID) && interaction.user.id !== CONFIG.OWNER_ID) {
-        return interaction.reply({ content: '❌ Nu ai permisiunea de a folosi comenzile administrative ale acestui bot!', ephemeral: true });
-    }
-
     if (commandName === 'supportpanel') {
         const embed = new EmbedBuilder()
             .setTitle('# VisiumComunity Support Panel')
@@ -232,7 +227,7 @@ client.on('interactionCreate', async interaction => {
                 ])
         );
         await interaction.channel.send({ embeds: [embed], components: [row] });
-        await interaction.reply({ content: '✅ Panou creat.', ephemeral: true });
+        await interaction.reply({ content: '✅ Panou creat.', flags: 64 });
     }
 
     if (commandName === 'suggestionpanel') {
@@ -258,10 +253,16 @@ client.on('interactionCreate', async interaction => {
                 .setStyle(ButtonStyle.Primary)
         );
         await interaction.channel.send({ embeds: [embed], components: [row] });
-        await interaction.reply({ content: '✅ Panou sugestii creat.', ephemeral: true });
+        await interaction.reply({ content: '✅ Panou sugestii creat.', flags: 64 });
     }
 
-    // --- COMENZI MODERAȚIE ---
+    // --- COMENZI MODERAȚIE (Securizate local pentru membrii simpli) ---
+    if (['warn', 'kick', 'ban', 'timeout', 'untimeout', 'lock', 'unlock', 'clear', 'suspect', 'mark'].includes(commandName)) {
+        if (!interaction.member.roles.cache.has(CONFIG.STAFF_ROLE_ID) && interaction.user.id !== CONFIG.OWNER_ID) {
+            return interaction.reply({ content: '❌ Nu ai permisiunea de a folosi comenzile administrative ale acestui bot!', flags: 64 });
+        }
+    }
+
     if (commandName === 'warn') {
         const target = options.getMember('utilizator');
         addSanction(target.id, 'WARN', options.getString('motiv') || 'Fără motiv', interaction.user.tag);
@@ -297,7 +298,7 @@ client.on('interactionCreate', async interaction => {
     }
     if (commandName === 'clear') {
         await interaction.channel.bulkDelete(options.getInteger('cantitate'), true);
-        await interaction.reply({ content: `🧹 Am șters mesajele.`, ephemeral: true });
+        await interaction.reply({ content: `🧹 Am șters mesajele.`, flags: 64 });
     }
     if (commandName === 'suspect') {
         const user = options.getUser('utilizator');
