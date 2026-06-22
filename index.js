@@ -1,29 +1,29 @@
 const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const express = require('express');
 
-// --- SERVER EXPRESS (PENTRU RENDER) ---
+// --- SERVER EXPRESS (PENTRU MENȚINERE UPTIME PE RENDER) ---
 const app = express();
 const port = process.env.PORT || 10000;
-app.get('/', (req, res) => res.send('Botul este online!'));
+app.get('/', (req, res) => res.send('Botul este online și stabil!'));
 app.listen(port, () => console.log(`Server web activ pe portul ${port}`));
 
-// --- CONFIGURARE CLIENT CU TOATE PERMISIUNILE ---
+// --- CONFIGURARE CLIENT CU TOATE INTENȚIILE DE TEXT ---
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent, 
+        GatewayIntentBits.MessageContent, // Permite citirea textului cu prefixul +
         GatewayIntentBits.GuildMembers
     ],
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
-// --- SISTEM ANTI-CRASH RADICAL ---
+// --- SISTEM ANTI-CRASH TOTAL (Prinde erorile și ține botul online permanent) ---
 client.on('error', error => console.error('[VISIUM ERRORE CLIENT]', error));
-process.on('unhandledRejection', error => console.error('[ANTI-CRASH] Eroare respinsă:', error));
-process.on('uncaughtException', error => console.error('[ANTI-CRASH] Excepție:', error));
+process.on('unhandledRejection', error => console.error('[ANTI-CRASH] Rejection:', error));
+process.on('uncaughtException', error => console.error('[ANTI-CRASH] Exception:', error));
 
-// 💡 ASIGURĂ-TE CĂ ACESTE ID-URI SUNT EXACT CELE DE PE SERVERUL TĂU!
+// --- ID-URILE SERVERULUI TĂU (CONFIGURAȚIE GENERALĂ) ---
 const CONFIG = {
     SCAMMER_ROLE_ID: '1492892376979738715', 
     SUSPECT_ROLE_ID: '1492892693959938089',  
@@ -34,7 +34,7 @@ const CONFIG = {
     SUGGESTION_CHANNEL_ID: '1517878554619150476'
 };
 
-// --- BAZA DE DATE TEMPORARĂ ---
+// --- BAZA DE DATE TEMPORARĂ (ÎN MEMORIE) ---
 const vouches = new Map();
 const pendingVouches = new Map();
 const sanctions = new Map();
@@ -44,9 +44,9 @@ function addSanction(userId, type, reason, modTag) {
     sanctions.get(userId).push({ type, reason, mod: modTag, date: new Date().toLocaleDateString() });
 }
 
-// --- ÎNREGISTRARE SLASH COMMANDS ---
+// --- ÎNREGISTRARE AUTOMATĂ SLASH COMMANDS LA PORNIRE ---
 client.once('ready', async () => {
-    console.log(`[VISIUM BOT] Conectat cu succes!`);
+    console.log(`[VISIUM BOT] Sincronizare comenzi cu Discord...`);
     
     const slashCommands = [
         { name: 'supportpanel', description: 'Creează panoul de suport (Tichete)' },
@@ -55,37 +55,38 @@ client.once('ready', async () => {
         { name: 'unwarn', description: 'Șterge ultimul avertisment al unui utilizator', options: [{ name: 'utilizator', type: 6, description: 'Userul vizat', required: true }] },
         { name: 'kick', description: 'Dă afară un utilizator', options: [{ name: 'utilizator', type: 6, description: 'Userul vizat', required: true }] },
         { name: 'ban', description: 'Banează un utilizator', options: [{ name: 'utilizator', type: 6, description: 'Userul vizat', required: true }] },
-        { name: 'timeout', description: 'Dă timeout unui utilizator', options: [{ name: 'utilizator', type: 6, description: 'Timp', required: true }, { name: 'minute', type: 4, description: 'Minute', required: true }, { name: 'motiv', type: 3, description: 'Motiv', required: false }] },
+        { name: 'timeout', description: 'Dă timeout unui utilizator', options: [{ name: 'utilizator', type: 6, description: 'Userul vizat', required: true }, { name: 'minute', type: 4, description: 'Timp în minute', required: true }, { name: 'motiv', type: 3, description: 'Motivul', required: false }] },
         { name: 'untimeout', description: 'Scoate timeout-ul', options: [{ name: 'utilizator', type: 6, description: 'Userul vizat', required: true }] },
         { name: 'lock', description: 'Blochează canalul curent' },
         { name: 'unlock', description: 'Deblochează canalul curent' },
-        { name: 'clear', description: 'Șterge mesaje', options: [{ name: 'cantitate', type: 4, description: 'Număr mesaje', required: true }] },
+        { name: 'clear', description: 'Șterge mesaje', options: [{ name: 'cantitate', type: 4, description: 'Numărul de mesaje', required: true }] },
         { name: 'suspect', description: 'Oferă rolul Suspect', options: [{ name: 'utilizator', type: 6, description: 'Userul vizat', required: true }] },
         { name: 'mark', description: 'Oferă rolul Scammer', options: [{ name: 'utilizator', type: 6, description: 'Userul vizat', required: true }] }
     ];
 
     try {
         await client.application.commands.set(slashCommands);
-        console.log(`[VISIUM BOT] Toate comenzile au fost reîmprospătate în Discord.`);
+        console.log(`[VISIUM BOT] Toate comenzile slash sunt active pe server!`);
     } catch (e) {
-        console.error('Eroare la slash commands:', e);
+        console.error('Eroare la trimiterea comenzilor:', e);
     }
 });
 
-// --- INTERACTION HANDLER ---
+// --- INTERACTION HANDLER (Butoane, Modale, SelectMenu, Slash Commands) ---
 client.on('interactionCreate', async interaction => {
     
+    // 1. GESTIONARE BUTOANE
     if (interaction.isButton()) {
         try {
             if (interaction.customId === 'vouch_accept' || interaction.customId === 'vouch_reject') {
                 const data = pendingVouches.get(interaction.message.id);
-                if (!data) return interaction.reply({ content: '❌ Eroare: Vouch-ul nu mai există în memoria cache.', flags: 64 });
+                if (!data) return interaction.reply({ content: '❌ Eroare: Acest vouch nu mai există în memoria cache.', flags: 64 });
 
                 if (interaction.customId === 'vouch_accept') {
                     if (!vouches.has(data.targetId)) vouches.set(data.targetId, []);
                     vouches.get(data.targetId).push({ status: 'accepted', comment: data.comment, authorName: data.authorName, timestamp: Date.now() });
                     pendingVouches.delete(interaction.message.id);
-                    return interaction.update({ embeds: [new EmbedBuilder().setTitle('✅ Vouch Aprobat').setColor(0x2ECC71).setDescription(`Vouch-ul pentru <@${data.targetId}> a fost acceptat.`)], components: [] });
+                    return interaction.update({ embeds: [new EmbedBuilder().setTitle('✅ Vouch Aprobat').setColor(0x2ECC71).setDescription(`Vouch-ul pentru <@${data.targetId}> a fost acceptat de staff.`)], components: [] });
                 } else {
                     pendingVouches.delete(interaction.message.id);
                     return interaction.update({ embeds: [new EmbedBuilder().setTitle('❌ Vouch Respins').setColor(0xFF0000).setDescription(`Vouch-ul pentru <@${data.targetId}> a fost respins.`)], components: [] });
@@ -105,9 +106,22 @@ client.on('interactionCreate', async interaction => {
                 modal.addComponents(new ActionRowBuilder().addComponents(q1), new ActionRowBuilder().addComponents(q2));
                 return interaction.showModal(modal);
             }
+
+            if (interaction.customId.startsWith('sug_accept_') || interaction.customId.startsWith('sug_reject_')) {
+                if (!interaction.member.roles.cache.has(CONFIG.STAFF_ROLE_ID) && interaction.user.id !== CONFIG.OWNER_ID) {
+                    return interaction.reply({ content: '❌ Doar staff-ul poate modera sugestiile.', flags: 64 });
+                }
+                const isAccept = interaction.customId.startsWith('sug_accept_');
+                const originalEmbed = interaction.message.embeds[0];
+                const updatedEmbed = EmbedBuilder.from(originalEmbed)
+                    .setColor(isAccept ? 0x2ECC71 : 0xFF0000)
+                    .addFields({ name: '📊 Status Final', value: `${isAccept ? '✅ Aprobată' : '❌ Respinsă'} de către ${interaction.user}` });
+                await interaction.update({ embeds: [updatedEmbed], components: [] });
+            }
         } catch (err) { console.error(err); }
     }
 
+    // 2. GESTIONARE MODALE (TRIMITERE SUGESTIE)
     if (interaction.isModalSubmit() && interaction.customId === 'suggestion_modal') {
         try {
             const sugestie = interaction.fields.getTextInputValue('sugestie_text');
@@ -120,14 +134,19 @@ client.on('interactionCreate', async interaction => {
                 { name: '📝 Sugestia', value: sugestie, inline: false },
                 { name: '❓ Cu ce ajută', value: motiv, inline: false }
             );
-            await channel.send({ embeds: [embed] });
-            await interaction.reply({ content: '✅ Sugestia ta a fost trimisă!', flags: 64 });
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`sug_accept_${interaction.user.id}`).setLabel('Aprobă').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId(`sug_reject_${interaction.user.id}`).setLabel('Respinge').setStyle(ButtonStyle.Danger)
+            );
+            await channel.send({ embeds: [embed], components: [row] });
+            await interaction.reply({ content: '✅ Sugestia ta a fost trimisă cu succes!', flags: 64 });
         } catch (err) { console.error(err); }
     }
 
+    // 3. GESTIONARE SELECT MENU (CREARE TICHETE)
     if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select') {
         try {
-            await interaction.deferReply({ flags: 64 });
+            await interaction.deferReply({ flags: 64 }); // Elimină eroarea de 3 secunde secundară
             const ticketType = interaction.values[0];
             const channel = await interaction.guild.channels.create({
                 name: `ticket-${interaction.user.username}-${ticketType}`,
@@ -136,26 +155,33 @@ client.on('interactionCreate', async interaction => {
                 permissionOverwrites: [
                     { id: interaction.guild.id, deny: ['ViewChannel'] }, 
                     { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
-                    { id: interaction.client.user.id, allow: ['ViewChannel', 'SendMessages'] }
+                    { id: interaction.client.user.id, allow: ['ViewChannel', 'SendMessages'] },
+                    { id: CONFIG.STAFF_ROLE_ID, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] }
                 ],
             });
-            await channel.send({ content: `👋 Tichet nou deschis de ${interaction.user} (Tip: ${ticketType}). Folosește butonul dedicat pentru închidere.` });
+
+            const rowClose = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('ticket_close').setLabel('Închide Tichet').setStyle(ButtonStyle.Danger)
+            );
+            await channel.send({ content: `<@&${CONFIG.STAFF_ROLE_ID}>, tichet nou deschis de ${interaction.user} (Tip: ${ticketType}).`, components: [rowClose] });
             await interaction.editReply({ content: `✅ Tichetul tău a fost creat: ${channel}` });
         } catch (error) { 
             console.error(error);
-            await interaction.editReply({ content: '❌ Nu s-a putut crea canalul. Verifică ID-ul categoriei sau permisiunile mele.' });
+            await interaction.editReply({ content: '❌ Nu am putut crea tichetul. Verifică permisiunile mele sau ID-ul categoriei.' });
         }
     }
 
-    // --- EXECUȚIE COMANDE SLASH BLINDATE ---
+    // 4. GESTIONARE EXECUTARE COMENZI SLASH
     if (!interaction.isChatInputCommand()) return;
     
     try {
         const { commandName, options } = interaction;
 
+        // Comanda Panel Suport (Protejată anti-timeout)
         if (commandName === 'supportpanel') {
+            await interaction.deferReply({ flags: 64 });
             const embed = new EmbedBuilder().setTitle('# VisiumComunity Support Panel').setColor(0x5865F2)
-                .setDescription(`🎫 **Ai nevoie de ajutor? Deschide un ticket.**`);
+                .setDescription(`🎫 **Ai nevoie de ajutor? Deschide un ticket.**\n👋 **Pentru cumpărare, apasă Purchase.**\n✅ **Ai de revendicat un reward? Deschide Claim Reward.**`);
             const row = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder().setCustomId('ticket_select').setPlaceholder('Alege tipul ticketului').addOptions([
                     { label: 'Support', value: 'support', emoji: '🎫' },
@@ -164,10 +190,19 @@ client.on('interactionCreate', async interaction => {
                 ])
             );
             await interaction.channel.send({ embeds: [embed], components: [row] });
-            return await interaction.reply({ content: '✅ Panou creat.', flags: 64 });
+            return await interaction.editReply({ content: '✅ Panou suport creat.' });
         }
 
-        // Verificare Staff generat automat
+        // Comanda Panel Sugestii (Protejată anti-timeout)
+        if (commandName === 'suggestionpanel') {
+            await interaction.deferReply({ flags: 64 });
+            const embed = new EmbedBuilder().setTitle('# VisiumComunity Suggestion Panel').setColor(0x9B59B6).setDescription(`**Ai o idee pentru server? Trimite sugestia ta prin butonul de mai jos.**`);
+            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('open_suggestion_modal').setLabel('Sugestie').setEmoji('💡').setStyle(ButtonStyle.Primary));
+            await interaction.channel.send({ embeds: [embed], components: [row] });
+            return await interaction.editReply({ content: '✅ Panou sugestii creat.' });
+        }
+
+        // Verificator automat de permisiuni Staff pentru restul comenzilor admin
         if (['warn', 'unwarn', 'kick', 'ban', 'timeout', 'untimeout', 'lock', 'unlock', 'clear', 'suspect', 'mark'].includes(commandName)) {
             if (!interaction.member.roles.cache.has(CONFIG.STAFF_ROLE_ID) && interaction.user.id !== CONFIG.OWNER_ID) {
                 return interaction.reply({ content: '❌ Nu ai permisiunea de a folosi comenzile administrative!', flags: 64 });
@@ -177,13 +212,13 @@ client.on('interactionCreate', async interaction => {
         const target = options.getMember('utilizator');
 
         if (commandName === 'warn') { 
-            if (!target) return interaction.reply({ content: '❌ Utilizatorul nu este pe server.', flags: 64 });
+            if (!target) return interaction.reply({ content: '❌ Utilizatorul nu a fost găsit pe server.', flags: 64 });
             addSanction(target.id, 'WARN', options.getString('motiv') || 'Fără motiv', interaction.user.tag); 
             return await interaction.reply(`⚠️ ${target.user.tag} a fost avertizat.`); 
         }
 
         if (commandName === 'unwarn') {
-            if (!target) return interaction.reply({ content: '❌ Utilizatorul nu este pe server.', flags: 64 });
+            if (!target) return interaction.reply({ content: '❌ Utilizatorul nu a fost găsit pe server.', flags: 64 });
             if (!sanctions.has(target.id) || sanctions.get(target.id).length === 0) return interaction.reply({ content: `❌ Acest utilizator nu are avertismente active.`, flags: 64 });
             
             const userSanctions = sanctions.get(target.id);
@@ -221,7 +256,7 @@ client.on('interactionCreate', async interaction => {
 
         if (commandName === 'lock') { 
             await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false }); 
-            return await interaction.reply('🔒 Canal blocat.'); 
+            return await interaction.reply('🔒 Canal blocat pentru membrii de rând.'); 
         }
 
         if (commandName === 'unlock') { 
@@ -235,15 +270,24 @@ client.on('interactionCreate', async interaction => {
             return await interaction.reply({ content: `🧹 Am șters ${cantitate} mesaje.`, flags: 64 }); 
         }
 
-    } catch (error) {
-        console.error("Eroare executie comanda:", error);
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: `❌ Eroare internă: \`${error.message}\`. Verifică logurile.`, flags: 64 }).catch(()=>{});
+        if (commandName === 'suspect') {
+            if (!target) return interaction.reply({ content: '❌ Utilizatorul nu este pe server.', flags: 64 });
+            await target.roles.add(CONFIG.SUSPECT_ROLE_ID).catch(()=>{});
+            return await interaction.reply(`🕵️ Rolul **Suspect** a fost acordat lui ${target.user.tag}.`);
         }
+
+        if (commandName === 'mark') {
+            if (!target) return interaction.reply({ content: '❌ Utilizatorul nu este pe server.', flags: 64 });
+            await target.roles.add(CONFIG.SCAMMER_ROLE_ID).catch(()=>{});
+            return await interaction.reply(`🚫 Rolul **Scammer** a fost acordat lui ${target.user.tag}.`);
+        }
+
+    } catch (error) {
+        console.error("Eroare la procesarea comenzii slash:", error);
     }
 });
 
-// --- COMENZI TEXT CU PREFIXUL "+" ---
+// --- GESTIONARE COMENZI TEXT CU PREFIXUL "+" ---
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.content.startsWith('+')) return;
 
@@ -252,52 +296,52 @@ client.on('messageCreate', async message => {
         const cmd = args[0].toLowerCase();
 
         if (cmd === '+help') {
-            const helpEmbed = new EmbedBuilder().setTitle('🤖 Meniu Comenzi').setColor(0x3498DB).setDescription(`**+vouch <user> <comentariu>**\n**+p / +profile [user]**\n**+lb / +leaderboard**`);
+            const helpEmbed = new EmbedBuilder().setTitle('🤖 Meniu Comenzi Text').setColor(0x3498DB)
+                .setDescription(`**+vouch <user> <comentariu>** - Trimite un vouch spre aprobare\n**+p / +profile [user]** - Vezi vouch-urile unui utilizator\n**+lb / +leaderboard** - Topul utilizatorilor după vouch-uri`);
             return message.reply({ embeds: [helpEmbed] });
         }
 
         if (cmd === '+vouch') {
-            if (!args[1]) return message.reply('💡 Folosire: `+vouch <user> <comentariu>`');
+            if (!args[1]) return message.reply('💡 Folosire corectă: `+vouch <user> <comentariu>`');
             const target = message.mentions.users.first();
-            if (!target) return message.reply('❌ Specifică un utilizator valid.');
+            if (!target) return message.reply('❌ Menționează un utilizator valid din server.');
             const comment = args.slice(2).join(' ');
-            if (!comment) return message.reply('📝 Scrie și comentariul vouch-ului.');
+            if (!comment) return message.reply('📝 Adaugă un text scurt pentru comentariul vouch-ului.');
 
             const vc = message.guild.channels.cache.get(CONFIG.VOUCH_CHANNEL_ID);
-            if (!vc) return message.reply('❌ Canalul de vouch-uri nu a fost găsit pe server.');
+            if (!vc) return message.reply('❌ Canalul de recepționare vouch-uri nu a fost găsit.');
             
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('vouch_accept').setLabel('Accept').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('vouch_reject').setLabel('Reject').setStyle(ButtonStyle.Danger)
+                new ButtonBuilder().setCustomId('vouch_accept').setLabel('Acceptă').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('vouch_reject').setLabel('Respinge').setStyle(ButtonStyle.Danger)
             );
             
-            const m = await vc.send({ embeds: [new EmbedBuilder().setTitle('📩 Vouch Nou').setDescription(`De la: ${message.author}\nPentru: ${target}\nComentariu: ${comment}`)], components: [row] });
+            const m = await vc.send({ embeds: [new EmbedBuilder().setTitle('📩 Vouch de aprobat').setDescription(`**De la:** ${message.author}\n**Pentru:** ${target}\n**Comentariu:** ${comment}`)], components: [row] });
             pendingVouches.set(m.id, { targetId: target.id, authorName: message.author.username, comment: comment }); 
-            return message.reply('✅ Vouch-ul a fost trimis spre verificare staff-ului.');
+            return message.reply('✅ Vouch-ul tău a fost înregistrat și trimis în canalul de verificare al staff-ului!');
         }
 
         if (cmd === '+p' || cmd === '+profile') {
             const target = message.mentions.users.first() || message.author; 
-            const allVouches = vouches.get(target.id) || [];
-            const acceptate = allVouches.filter(v => v.status === 'accepted').length;
-            const refuzate = allVouches.filter(v => v.status === 'rejected').length;
-            return message.reply({ embeds: [new EmbedBuilder().setTitle(`👤 Profil: ${target.username}`).setDescription(`✅ Aprobate: \`${acceptate}\`\n❌ Respinse: \`${refuzate}\``)] });
-        }
+                    const allVouches = vouches.get(target.id) || [];
+        const acceptate = allVouches.filter(v => v.status === 'accepted').length;
+        const refuzate = allVouches.filter(v => v.status === 'rejected').length;
+        return message.reply({ embeds: [new EmbedBuilder().setTitle(`👤 Profil Vouch: ${target.username}`).setColor(0x00FFFF).setDescription(`✅ Vouch-uri aprobate: \`${acceptate}\`\n❌ Vouch-uri respinse: \`${refuzate}\``)] });
+    }
 
-        if (cmd === '+leaderboard' || cmd === '+lb') {
-            let arr = [];
-            for (const [uid, list] of vouches.entries()) {
-                const count = list.filter(v => v.status === 'accepted').length;
-                if (count > 0) arr.push({ uid, count });
-            }
-            arr.sort((a, b) => b.count - a.count);
-            let txt = `# 🏆 Top 10 Vouch-uri\n`;
-            if (arr.length === 0) txt += `Niciun vouch încă.`;
-            else arr.slice(0, 10).forEach((u, i) => { txt += `**#${i+1}** <@${u.uid}> - \`${u.count}\` vouch-uri\n`; });
-            return message.reply(txt);
+    if (cmd === '+leaderboard' || cmd === '+lb') {
+        let arr = [];
+        for (const [uid, list] of vouches.entries()) {
+            const count = list.filter(v => v.status === 'accepted').length;
+            if (count > 0) arr.push({ uid, count });
         }
+        arr.sort((a, b) => b.count - a.count);
+        let txt = `# 🏆 Top 10 Leaderboard Vouch-uri\n`;
+        if (arr.length === 0) txt += `Nu există vouch-uri înregistrate încă pe acest server.`;
+        else arr.slice(0, 10).forEach((u, i) => { txt += `**#${i+1}** <@${u.uid}> — \`${u.count}\` vouch-uri aprobate\n`; });
+        return message.reply(txt);
+    }
     } catch (err) { console.error(err); }
 });
 
-client.login(process.env.TOKEN).catch(err => console.error("Eroare Login:", err));
-                    
+client.login(process.env.TOKEN).catch(err => console.error("Eroare fatală la conectarea Token-ului:", err));
