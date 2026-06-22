@@ -384,4 +384,7 @@ client.on('messageCreate', async message => {
         }
     });
 
-    client.login(process.env.TOKEN);
+    client.login(process.env.TOKEN).catch(err => {
+    console.error("❌ [VISIUM ERRORE CONECTARE DISCORD]:", err);
+});
+
