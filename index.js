@@ -52,7 +52,7 @@ const client = new Client({
 // =========================================================
 // 4. EVENIMENTUL DE PORNIRE (MODERNIZAT LA clientReady)
 // =========================================================
-client.once('clientReady', async (c) => {
+client.once('ready', async (c) => {
     console.log(`[VISIUM BOT] Conectat! Înregistrez comenzile...`);
 
     // Înregistrează automat comanda de tip Slash: /supportpanel
