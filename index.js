@@ -343,5 +343,20 @@ client.on('messageCreate', async message => {
     }
     } catch (err) { console.error(err); }
 });
+// Detectare blocaj și reconectare automată
+client.on('error', (error) => {
+    console.error('Eroare de conexiune, se încearcă reconectarea:', error);
+});
+
+// Verificare periodică (la fiecare 60 de secunde)
+setInterval(() => {
+    if (client.uptime && (Date.now() - client.readyTimestamp > 600000)) {
+        // Dacă botul e pornit de mai mult de 10 minute și nu răspunde, forțează ping-ul
+        if (client.ws.status !== 0) { // 0 înseamnă Ready/Connected
+            console.log('Bot blocat, forțez reconectarea...');
+            process.exit(1); // Acest exit va opri botul, iar dacă ai un "process manager" (sau îl rulezi cu un script de restart), va reporni curat.
+        }
+    }
+}, 60000);
 
 client.login(process.env.TOKEN).catch(err => console.error("Eroare fatală la conectarea Token-ului:", err));
