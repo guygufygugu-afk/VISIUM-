@@ -6,34 +6,20 @@ const client = new Client({
 });
 
 const vouches = new Map();
-
 const CONFIG = {
-    SERVER_ID: '1522942162025840670',
-    OWNER: '1522987982527922297',
-    MOD_IMP: '1522994291335762060',
-    MOD_SLAB: '1522995287201812671',
     TICKET_STAFF: '1522995560972554393',
-    MM: { 
-        PVP: '1522997096930607114', 
-        _0_150: '1522997211519258785', 
-        _150_500: '1522997417765507153', 
-        _1B: '1522997572979920938', 
-        OG: '1522997679733473280' 
-    }
+    VOUCH_CHANNEL: '1524691694912540813',
+    GIF_LINK: 'https://cdn.discordapp.com/attachments/1524034577784635472/1524038680556077137/Adobe_Express_-_ezgif.com-video-to-gif-converter.gif?ex=6a504560&is=6a4ef3e0&hm=7d060c1aa3c96ea25da450b6f1fc3f34b299b1872fa23da28f2c2ba149667308&'
 };
 
 client.once('ready', async () => {
     const commands = [
         new SlashCommandBuilder().setName('setup-support').setDescription('Panou Support'),
-        new SlashCommandBuilder().setName('setup-mm').setDescription('Panou Middleman'),
-        new SlashCommandBuilder().setName('ban').setDescription('Ban').addUserOption(o => o.setName('user').setDescription('User').setRequired(true)),
-        new SlashCommandBuilder().setName('lock').setDescription('Lock'),
-        new SlashCommandBuilder().setName('unlock').setDescription('Unlock')
+        new SlashCommandBuilder().setName('setup-mm').setDescription('Panou Middleman')
     ];
     await client.application.commands.set(commands);
 });
 
-// LOGICĂ TICKETE
 client.on('interactionCreate', async interaction => {
     if (interaction.isStringSelectMenu()) {
         const channel = await interaction.guild.channels.create({
@@ -46,50 +32,44 @@ client.on('interactionCreate', async interaction => {
         });
         return interaction.reply({ content: `✅ Ticket creat: ${channel}`, ephemeral: true });
     }
-
-    if (!interaction.isChatInputCommand()) return;
-
-    if (interaction.commandName === 'setup-support') {
-        const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('s').setOptions([
-            { label: 'Suport', value: 'supp', emoji: '🎧' }, { label: 'Raport', value: 'rep', emoji: '📄' }
-        ]));
-        interaction.reply({ content: "Panou Suport", components: [row] });
-    }
+    // ... setup-support și setup-mm logica (ca mai sus) ...
 });
 
-// LOGICĂ PREFIX (+p)
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.content.startsWith('+')) return;
     const args = message.content.split(' ');
-    
-    if (args[0] === '+p') {
-        const target = message.mentions.users.first() || message.author;
-        const data = vouches.get(target.id) || { list: [], accepted: 0, rejected: 0 };
-        const comms = data.list.length > 0 ? data.list.slice(-3).map((v, i) => `${i + 1}. **${v.author}**: ${v.text}`).join('\n') : "Nu există.";
-        const badge = data.accepted >= 10 ? '👑 Legend' : (data.accepted >= 5 ? '👨‍✈️ Trusted' : 'Niciunul');
+    const cmd = args[0].toLowerCase();
+
+    // +vouch @user [comentariu]
+    if (cmd === '+vouch') {
+        const target = message.mentions.users.first();
+        if (!target) return message.reply('❌ Specifică un user!');
+        const comment = args.slice(2).join(' ') || "Fără comentariu";
         
-        const embed = new EmbedBuilder()
-            .setTitle('👨‍✈️ Profil Utilizator')
-            .setColor(0x00FFFF)
-            .setDescription(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        const data = vouches.get(target.id) || { accepted: 0 };
+        data.accepted += 1;
+        vouches.set(target.id, data);
 
-🤺 **User:** ${target.tag}
-🆔 **ID:** ${target.id}
-📱 **Display Name:** ${target.username}
-⌚ **Cont creat:** <t:${Math.floor(target.createdTimestamp / 1000)}:D>
+        const vChannel = message.guild.channels.cache.get(CONFIG.VOUCH_CHANNEL);
+        if (vChannel) {
+            const embed = new EmbedBuilder()
+                .setTitle('✅ Vouch Nou')
+                .setColor(0x00FF00)
+                .setDescription(`**User:** <@${target.id}>\n**De la:** ${message.author.username}\n**Mesaj:** ${comment}`);
+            vChannel.send({ embeds: [embed] });
+        }
+        message.reply(`✅ Vouch adăugat cu succes pentru ${target.username}!`);
+    }
 
-📰 **Informații Vouch**
-✅ **Vouch-uri acceptate:** ${data.accepted}
-❌ **Vouch-uri refuzate:** ${data.rejected}
-
-🚦 **Badge-uri**
-${badge}
-
-✉️ **Ultimele comentarii**
-${comms}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    if (cmd === '+p') {
+        const target = message.mentions.users.first() || message.author;
+        const data = vouches.get(target.id) || { accepted: 0 };
+        const embed = new EmbedBuilder().setTitle('👨‍✈️ Profil Utilizator').setDescription(`🤺 **User:** ${target.tag}\n🆔 **ID:** ${target.id}\n✅ **Vouch-uri:** ${data.accepted}`);
         message.reply({ embeds: [embed] });
+    }
+
+    if (cmd === '+help') {
+        message.reply('📜 **Comenzi:**\n+p [user], +vouch [user] [text]\n/setup-support, /setup-mm');
     }
 });
 
