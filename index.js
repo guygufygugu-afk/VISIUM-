@@ -1,3 +1,17 @@
+const express = require('express');
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+    res.send('Bot is running!');
+});
+
+app.listen(port, () => {
+    console.log(`Server web activ pe portul ${port}`);
+});
+
+// Restul codului tău (clientul, comenzile, etc) urmează aici...
+
 const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, SlashCommandBuilder } = require('discord.js');
 
 const client = new Client({
