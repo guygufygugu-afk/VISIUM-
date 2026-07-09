@@ -99,23 +99,32 @@ client.on('messageCreate', async message => {
         return message.reply({ embeds: [helpEmbed] });
     }
 
-    if (cmd === '+vouch') {
+        if (cmd === '+vouch') {
         const target = message.mentions.users.first();
         const comment = args.slice(2).join(' ');
+        
         if (!target) return message.reply('❌ Specifică un user!');
         if (!comment) return message.reply('❌ Trebuie să scrii un comentariu!');
+        
+        // --- VERIFICARE: NU ÎȚI POȚI DA VOUCH ȚIE ---
+        if (target.id === message.author.id) {
+            return message.reply('❌ Nu îți poți oferi vouch ție însuți!');
+        }
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('vouch_accept').setLabel('Acceptă').setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId('vouch_reject').setLabel('Respinge').setStyle(ButtonStyle.Danger)
         );
+        
         const m = await client.channels.cache.get(CONFIG.VOUCH_CHANNEL_ID).send({
             embeds: [new EmbedBuilder().setTitle('📩 Vouch Nou').setDescription(`Pentru: ${target}\nDe la: ${message.author}\nComentariu: ${comment}`)],
             components: [row]
         });
+        
         pendingVouches.set(m.id, { targetId: target.id, authorName: message.author.username, comment: comment });
         message.reply('✅ Vouch trimis la staff!');
-    }
+        }
+    
 
     if (cmd === '+p' || cmd === '+profile') {
         const target = message.mentions.users.first() || message.author;
