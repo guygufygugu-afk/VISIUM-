@@ -1,147 +1,110 @@
-const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, SlashCommandBuilder } = require('discord.js');
 const express = require('express');
-
-// --- SERVER EXPRESS ---
 const app = express();
-const port = process.env.PORT || 10000;
-app.get('/', (req, res) => res.send('Botul este online!'));
-app.listen(port, () => console.log(`Server web activ pe portul ${port}`));
+app.listen(process.env.PORT || 10000);
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers
-    ],
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers],
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
-// --- CONFIGURAȚIE ---
+const vouches = new Map();
+
 const CONFIG = {
-    OWNER_ID: '1522987982527922297',
-    STAFF_ROLE_ID: '1522995287201812671',
-    VOUCH_CHANNEL_ID: '1524691694912540813',
-    SUSPECT_ROLE_ID: '1492892693959938089'
+    SERVER_ID: '1522942162025840670',
+    OWNER: '1522987982527922297',
+    MOD_IMP: '1522994291335762060',
+    MOD_SLAB: '1522995287201812671',
+    TICKET_STAFF: '1522995560972554393',
+    MM_ROLES: {
+        PVP: '1522997096930607114',
+        _0_150: '1522997211519258785',
+        _150_500: '1522997417765507153',
+        _1B: '1522997572979920938',
+        OG: '1522997679733473280'
+    },
+    GIF_LINK: 'https://cdn.discordapp.com/attachments/1524034577784635472/1524038680556077137/Adobe_Express_-_ezgif.com-video-to-gif-converter.gif?ex=6a504560&is=6a4ef3e0&hm=7d060c1aa3c96ea25da450b6f1fc3f34b299b1872fa23da28f2c2ba149667308&'
 };
 
-const vouches = new Map();
-const pendingVouches = new Map();
-
+// --- SLASH COMMANDS SETUP ---
 client.once('ready', async () => {
-    const slashCommands = [
-        { name: 'warn', description: 'Avertizează un utilizator', options: [{ name: 'utilizator', type: 6, description: 'User', required: true }, { name: 'motiv', type: 3, description: 'Motiv', required: false }] },
-        { name: 'kick', description: 'Dă kick', options: [{ name: 'utilizator', type: 6, description: 'User', required: true }] },
-        { name: 'ban', description: 'Banează un user', options: [{ name: 'utilizator', type: 6, description: 'User', required: true }] },
-        { name: 'unban', description: 'Debanează un user', options: [{ name: 'id', type: 3, description: 'ID User', required: true }] },
-        { name: 'timeout', description: 'Dă timeout', options: [{ name: 'utilizator', type: 6, description: 'User', required: true }, { name: 'minute', type: 4, description: 'Minute', required: true }] },
-        { name: 'untimeout', description: 'Scoate timeout', options: [{ name: 'utilizator', type: 6, description: 'User', required: true }] },
-        { name: 'suspect', description: 'Setează rolul Suspect', options: [{ name: 'utilizator', type: 6, description: 'User', required: true }] },
-        { name: 'clear', description: 'Șterge mesaje', options: [{ name: 'cantitate', type: 4, description: 'Nr mesaje', required: true }] }
+    const commands = [
+        new SlashCommandBuilder().setName('setup-support').setDescription('Panou Support'),
+        new SlashCommandBuilder().setName('setup-mm').setDescription('Panou Middleman'),
+        new SlashCommandBuilder().setName('ban').setDescription('Ban user').addUserOption(o => o.setName('user').setRequired(true)),
+        new SlashCommandBuilder().setName('kick').setDescription('Kick user').addUserOption(o => o.setName('user').setRequired(true)),
+        new SlashCommandBuilder().setName('lock').setDescription('Lock canal'),
+        new SlashCommandBuilder().setName('unlock').setDescription('Unlock canal'),
+        new SlashCommandBuilder().setName('timeout').setDescription('Timeout').addUserOption(o => o.setName('user').setRequired(true)).addIntegerOption(o => o.setName('min').setRequired(true))
     ];
-    await client.application.commands.set(slashCommands);
-    console.log('Bot activ și comenzi setate!');
+    await client.application.commands.set(commands);
+    console.log('Bot activ!');
 });
 
-// --- INTERACȚIUNI & MODERARE ---
+// --- INTERACȚIUNI (Slash + Meniuri) ---
 client.on('interactionCreate', async interaction => {
-    if (interaction.isButton()) {
-        const data = pendingVouches.get(interaction.message.id);
-        if (!data) return;
-        if (interaction.customId === 'vouch_accept') {
-            if (!vouches.has(data.targetId)) vouches.set(data.targetId, []);
-            vouches.get(data.targetId).push({ status: 'accepted', comment: data.comment, authorName: data.authorName });
-            pendingVouches.delete(interaction.message.id);
-            return interaction.update({ embeds: [new EmbedBuilder().setTitle('✅ Vouch Aprobat').setColor(0x2ECC71)], components: [] });
-        } else {
-            pendingVouches.delete(interaction.message.id);
-            return interaction.update({ embeds: [new EmbedBuilder().setTitle('❌ Vouch Respins').setColor(0xFF0000)], components: [] });
-        }
+    if (interaction.isStringSelectMenu()) {
+        const channel = await interaction.guild.channels.create({
+            name: `ticket-${interaction.user.username}`,
+            permissionOverwrites: [
+                { id: interaction.guild.id, deny: ['ViewChannel'] },
+                { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages'] },
+                { id: CONFIG.TICKET_STAFF, allow: ['ViewChannel', 'SendMessages'] }
+            ]
+        });
+        return interaction.reply({ content: `✅ Ticket creat: ${channel}`, ephemeral: true });
     }
 
     if (!interaction.isChatInputCommand()) return;
-    
-    // Verificare Staff
-    const isOwner = interaction.user.id === CONFIG.OWNER_ID;
-    const isStaff = interaction.member.roles.cache.has(CONFIG.STAFF_ROLE_ID);
-    const adminCommands = ['kick', 'ban', 'unban', 'timeout', 'untimeout', 'suspect', 'clear', 'warn'];
-    
-    if (adminCommands.includes(interaction.commandName) && !isOwner && !isStaff) {
-        return interaction.reply({ content: '❌ Nu ai permisiunea de a folosi comenzile de moderare!', ephemeral: true });
+
+    if (interaction.commandName === 'setup-support') {
+        const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('s').setOptions([
+            { label: 'Suport General', value: 'supp', emoji: '🎧' }, { label: 'Raportare', value: 'rep', emoji: '📄' }, { label: 'Cumparare', value: 'buy', emoji: '💎' }
+        ]));
+        const embed = new EmbedBuilder().setDescription(`## <:433405340:1523979383612768257> User Community Support Panel\n **Echipa noastră este aici să te ajute. Timpul de răspuns poate varia în funcție de încărcare, dar vom ajunge la tine cât mai repede posibil!**\n## <:5454654:1523979441158492263> Support General\n **Dacă ai o întrebare generală, ai găsit un bug sau nu știi exact unde să mergi, acesta este locul potrivit. Deschide un ticket și staff-ul te va ajuta.**\n## <:404560406:1523979551624003604> Raportează un utilizator\n **Luăm regulile în serios pentru a păstra comunitatea în siguranță. Dacă ai dovezi că cineva dă scam sau încalcă regulile, deschide un ticket și spune-ne.**\n## <:203442304:1523979639335157841> Servicii de Cumparare\n **Ai văzut o ofertă bombă pe server? Deschide ticket de cumpărare!**`);
+        interaction.reply({ embeds: [embed], components: [row] });
     }
 
-    const { commandName, options } = interaction;
-    const target = options.getMember('utilizator');
-    
-    try {
-        if (commandName === 'kick') { await target.kick(); await interaction.reply('✅ Kick dat.'); }
-        else if (commandName === 'ban') { await target.ban(); await interaction.reply('✅ Banat.'); }
-        else if (commandName === 'unban') { await interaction.guild.members.unban(options.getString('id')); await interaction.reply('✅ Unban efectuat.'); }
-        else if (commandName === 'timeout') { await target.timeout(options.getInteger('minute') * 60 * 1000); await interaction.reply('✅ Timeout aplicat.'); }
-        else if (commandName === 'untimeout') { await target.timeout(null); await interaction.reply('✅ Timeout scos.'); }
-        else if (commandName === 'suspect') { await target.roles.add(CONFIG.SUSPECT_ROLE_ID); await interaction.reply('✅ Rol Suspect acordat.'); }
-        else if (commandName === 'clear') { await interaction.channel.bulkDelete(options.getInteger('cantitate'), true); await interaction.reply({ content: '✅ Mesaje șterse.', ephemeral: true }); }
-        else if (commandName === 'warn') { await interaction.reply('✅ Avertisment înregistrat.'); }
-    } catch (e) { interaction.reply('❌ Eroare: Nu am permisiuni suficiente.'); }
+    if (interaction.commandName === 'setup-mm') {
+        const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('mm').setOptions([
+            { label: 'PVP', value: CONFIG.MM_ROLES.PVP }, { label: '0-150m', value: CONFIG.MM_ROLES._0_150 }, { label: '150-500m', value: CONFIG.MM_ROLES._150_500 }, { label: '1b+', value: CONFIG.MM_ROLES._1B }, { label: 'OG', value: CONFIG.MM_ROLES.OG }
+        ]));
+        const embed = new EmbedBuilder().setImage(CONFIG.GIF_LINK).setDescription(`<:433405340:1523979383612768257>**Middleman\nCand deschizi un ticket:**\n<:433405340:1523979383612768257>  **Așteptați ca un intermediar să vă revendice Ticket. Nu contactați intermediarii.**\n<:433405340:1523979383612768257>  **Urmați cu atenție instrucțiunile intermediarului.**\n<:433405340:1523979383612768257> **Asigurați-vă că da-ti vouch la intermediar în canalul desemnat odată ce trade-ul este finalizat.\nPowered by USER**`);
+        interaction.reply({ embeds: [embed], components: [row] });
+    }
 });
 
-// --- COMENZI TEXT ---
+// --- PREFIX COMMANDS (+) ---
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.content.startsWith('+')) return;
     const args = message.content.split(' ');
     const cmd = args[0].toLowerCase();
 
-    if (cmd === '+help') {
-        const helpEmbed = new EmbedBuilder()
-            .setTitle('🤖 Meniu Comenzi')
-            .setColor(0x3498DB)
-            .setDescription(`**📜 Vouch System**\n\`+vouch <user> <comentariu>\` - Trimite un vouch.\n\`+p [user]\` - Vezi profilul.\n\`+leaderboard\` - Top vouch-uri.\n\n**🛠️ Staff / Slash Commands**\n\`/ban /unban /kick /timeout /untimeout /suspect /clear\`\n\n**💡 Exemplu vouch**\n\`+vouch @user 24€ LTC to MM\``);
-        return message.reply({ embeds: [helpEmbed] });
+    if (cmd === '+p') {
+        const target = message.mentions.users.first() || message.author;
+        const data = vouches.get(target.id) || { list: [], accepted: 0, rejected: 0 };
+        const comms = data.list.length > 0 ? data.list.slice(-3).map((v, i) => `${i + 1}. **${v.author}**: ${v.text}`).join('\n') : "Nu există.";
+        const badge = data.accepted >= 10 ? '👑 Legend' : (data.accepted >= 5 ? '👨‍✈️ Trusted' : 'Niciunul');
+        
+        const embed = new EmbedBuilder().setTitle('👨‍✈️ Profil Utilizator').setColor(0x00FFFF).setDescription(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🤺 **User:** ${target.tag}\n🆔 **ID:** ${target.id}\n📱 **Display Name:** ${target.username}\n⌚ **Cont creat:** <t:${Math.floor(target.createdTimestamp / 1000)}:D>\n\n📰 **Informații Vouch**\n✅ **Vouch-uri acceptate:** ${data.accepted}\n❌ **Vouch-uri refuzate:** ${data.rejected}\n\n🚦 **Badge-uri**\n${badge}\n\n✉️ **Ultimele comentarii**\n${comms}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        message.reply({ embeds: [embed] });
     }
 
-        if (cmd === '+vouch') {
+    if (cmd === '+vouch') {
         const target = message.mentions.users.first();
-        const comment = args.slice(2).join(' ');
-        
         if (!target) return message.reply('❌ Specifică un user!');
-        if (!comment) return message.reply('❌ Trebuie să scrii un comentariu!');
-        
-        // --- VERIFICARE: NU ÎȚI POȚI DA VOUCH ȚIE ---
-        if (target.id === message.author.id) {
-            return message.reply('❌ Nu îți poți oferi vouch ție însuți!');
-        }
+        const comment = args.slice(2).join(' ') || "Fără comentariu";
+        const data = vouches.get(target.id) || { list: [], accepted: 0, rejected: 0 };
+        data.list.push({ author: message.author.username, text: comment });
+        data.accepted += 1;
+        vouches.set(target.id, data);
+        message.reply(`✅ Vouch adăugat pentru ${target.username}!`);
+    }
 
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('vouch_accept').setLabel('Acceptă').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('vouch_reject').setLabel('Respinge').setStyle(ButtonStyle.Danger)
-        );
-        
-        const m = await client.channels.cache.get(CONFIG.VOUCH_CHANNEL_ID).send({
-            embeds: [new EmbedBuilder().setTitle('📩 Vouch Nou').setDescription(`Pentru: ${target}\nDe la: ${message.author}\nComentariu: ${comment}`)],
-            components: [row]
-        });
-        
-        pendingVouches.set(m.id, { targetId: target.id, authorName: message.author.username, comment: comment });
-        message.reply('✅ Vouch trimis la staff!');
-        }
-    
-
-    if (cmd === '+p' || cmd === '+profile') {
-        const target = message.mentions.users.first() || message.author;
-        const allVouches = vouches.get(target.id) || [];
-        const acceptate = allVouches.filter(v => v.status === 'accepted');
-        const refuzate = allVouches.filter(v => v.status === 'rejected').length;
-        
-        const badge = acceptate.length >= 5 ? '👨‍✈️ Trusted' : 'Niciunul';
-        const coms = acceptate.slice(-3).map((v, i) => `${i + 1}. **${v.authorName}**: ${v.comment}`).join('\n') || 'Nu există.';
-
-        const embed = new EmbedBuilder()
-            .setTitle('👨‍✈️ Profil Utilizator')
-            .setColor(0x00FFFF)
-            .setDescription(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🤺 **User:** ${target.tag}\n🆔 **ID:** ${target.id}\n📱 **Display Name:** ${target.username}\n⌚ **Cont creat:** <t:${Math.floor(target.createdTimestamp / 1000)}:D>\n\n📰 **Informații Vouch**\n✅ **Vouch-uri acceptate:** ${acceptate.length}\n❌ **Vouch-uri refuzate:** ${refuzate}\n\n🚦 **Badge-uri**\n${badge}\n\n✉️ **Ultimele comentarii**\n${coms}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-        message.reply({ embeds: [embed] });
+    if (cmd === '+help') {
+        message.reply('📜 **Comenzi:**\n+p [user], +vouch [user] [text], +lb\n/setup-support, /setup-mm, /ban, /kick, /lock, /unlock');
     }
 });
 
 client.login(process.env.TOKEN);
-    
+        
