@@ -30,20 +30,20 @@ const pendingVouches = new Map();
 
 client.once('ready', async () => {
     const slashCommands = [
-        { name: 'warn', description: 'Warn', options: [{ name: 'utilizator', type: 6, required: true }, { name: 'motiv', type: 3, required: false }] },
-        { name: 'kick', description: 'Kick', options: [{ name: 'utilizator', type: 6, required: true }] },
-        { name: 'ban', description: 'Ban', options: [{ name: 'utilizator', type: 6, required: true }] },
-        { name: 'unban', description: 'Unban', options: [{ name: 'id', type: 3, required: true }] },
-        { name: 'timeout', description: 'Timeout', options: [{ name: 'utilizator', type: 6, required: true }, { name: 'minute', type: 4, required: true }] },
-        { name: 'untimeout', description: 'Untimeout', options: [{ name: 'utilizator', type: 6, required: true }] },
-        { name: 'suspect', description: 'Rol Suspect', options: [{ name: 'utilizator', type: 6, required: true }] },
-        { name: 'clear', description: 'Șterge mesaje', options: [{ name: 'cantitate', type: 4, required: true }] }
+        { name: 'warn', description: 'Avertizează un utilizator', options: [{ name: 'utilizator', type: 6, description: 'User', required: true }, { name: 'motiv', type: 3, description: 'Motiv', required: false }] },
+        { name: 'kick', description: 'Dă kick', options: [{ name: 'utilizator', type: 6, description: 'User', required: true }] },
+        { name: 'ban', description: 'Banează un user', options: [{ name: 'utilizator', type: 6, description: 'User', required: true }] },
+        { name: 'unban', description: 'Debanează un user', options: [{ name: 'id', type: 3, description: 'ID User', required: true }] },
+        { name: 'timeout', description: 'Dă timeout', options: [{ name: 'utilizator', type: 6, description: 'User', required: true }, { name: 'minute', type: 4, description: 'Minute', required: true }] },
+        { name: 'untimeout', description: 'Scoate timeout', options: [{ name: 'utilizator', type: 6, description: 'User', required: true }] },
+        { name: 'suspect', description: 'Setează rolul Suspect', options: [{ name: 'utilizator', type: 6, description: 'User', required: true }] },
+        { name: 'clear', description: 'Șterge mesaje', options: [{ name: 'cantitate', type: 4, description: 'Nr mesaje', required: true }] }
     ];
     await client.application.commands.set(slashCommands);
-    console.log('Bot activ!');
+    console.log('Bot activ și comenzi setate!');
 });
 
-// --- INTERACȚIUNI SLASH & BUTOANE ---
+// --- INTERACȚIUNI & MODERARE ---
 client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
         const data = pendingVouches.get(interaction.message.id);
@@ -60,6 +60,16 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (!interaction.isChatInputCommand()) return;
+    
+    // Verificare Staff
+    const isOwner = interaction.user.id === CONFIG.OWNER_ID;
+    const isStaff = interaction.member.roles.cache.has(CONFIG.STAFF_ROLE_ID);
+    const adminCommands = ['kick', 'ban', 'unban', 'timeout', 'untimeout', 'suspect', 'clear', 'warn'];
+    
+    if (adminCommands.includes(interaction.commandName) && !isOwner && !isStaff) {
+        return interaction.reply({ content: '❌ Nu ai permisiunea de a folosi comenzile de moderare!', ephemeral: true });
+    }
+
     const { commandName, options } = interaction;
     const target = options.getMember('utilizator');
     
@@ -70,11 +80,12 @@ client.on('interactionCreate', async interaction => {
         else if (commandName === 'timeout') { await target.timeout(options.getInteger('minute') * 60 * 1000); await interaction.reply('✅ Timeout aplicat.'); }
         else if (commandName === 'untimeout') { await target.timeout(null); await interaction.reply('✅ Timeout scos.'); }
         else if (commandName === 'suspect') { await target.roles.add(CONFIG.SUSPECT_ROLE_ID); await interaction.reply('✅ Rol Suspect acordat.'); }
-        else if (commandName === 'clear') { await interaction.channel.bulkDelete(options.getInteger('cantitate'), true); await interaction.reply('✅ Mesaje șterse.'); }
-    } catch (e) { interaction.reply('❌ Eroare: Nu am permisiuni sau ID invalid.'); }
+        else if (commandName === 'clear') { await interaction.channel.bulkDelete(options.getInteger('cantitate'), true); await interaction.reply({ content: '✅ Mesaje șterse.', ephemeral: true }); }
+        else if (commandName === 'warn') { await interaction.reply('✅ Avertisment înregistrat.'); }
+    } catch (e) { interaction.reply('❌ Eroare: Nu am permisiuni suficiente.'); }
 });
 
-// --- COMENZI TEXT (+vouch, +p, +help) ---
+// --- COMENZI TEXT ---
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.content.startsWith('+')) return;
     const args = message.content.split(' ');
@@ -84,7 +95,7 @@ client.on('messageCreate', async message => {
         const helpEmbed = new EmbedBuilder()
             .setTitle('🤖 Meniu Comenzi')
             .setColor(0x3498DB)
-            .setDescription(`**📜 Vouch System**\n\`+vouch <user> <comentariu>\`\n\`+p [user]\`\n\`+leaderboard\`\n\n**🛠️ Staff / Slash Commands**\n\`/ban /unban /kick /timeout /untimeout /suspect /clear\`\n\n**💡 Exemplu vouch**\n\`+vouch @user 24€ LTC to MM\``);
+            .setDescription(`**📜 Vouch System**\n\`+vouch <user> <comentariu>\` - Trimite un vouch.\n\`+p [user]\` - Vezi profilul.\n\`+leaderboard\` - Top vouch-uri.\n\n**🛠️ Staff / Slash Commands**\n\`/ban /unban /kick /timeout /untimeout /suspect /clear\`\n\n**💡 Exemplu vouch**\n\`+vouch @user 24€ LTC to MM\``);
         return message.reply({ embeds: [helpEmbed] });
     }
 
@@ -124,3 +135,4 @@ client.on('messageCreate', async message => {
 });
 
 client.login(process.env.TOKEN);
+    
